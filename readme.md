@@ -1,14 +1,14 @@
 # bevy_fact_rule_event
 
-[![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE) <img src="https://img.shields.io/github/repo-size/Bli-AIk/souprune.svg"/> <img src="https://img.shields.io/github/last-commit/Bli-AIk/souprune.svg"/> <br>
+[![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE) <img src="https://img.shields.io/github/repo-size/Bli-AIk/bevy_fact_rule_event.svg"/> <img src="https://img.shields.io/github/last-commit/Bli-AIk/bevy_fact_rule_event.svg"/> <br>
 <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" />
 
 > Current Status: 🚧 Early Development (Initial version in progress)
 
 **bevy_fact_rule_event** — Fact-Rule-Event system for Bevy engine.
 
-| English         | Simplified Chinese                 |
-|-----------------|---------------------------------|
+| English | Simplified Chinese          |
+|---------|-----------------------------|
 | English | [简体中文](./readme_zh-hans.md) |
 
 ## Introduction
