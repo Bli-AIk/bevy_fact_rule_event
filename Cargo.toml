@@ -13,3 +13,6 @@ exclude = [
 
 [dependencies]
 bevy = "0.17.2"
+serde = { version = "1.0", features = ["derive"] }
+ron = "0.10"
+anyhow = "1.0"
