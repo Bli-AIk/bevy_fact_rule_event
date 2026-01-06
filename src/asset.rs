@@ -245,7 +245,7 @@ impl RuleDef {
             condition: self.condition.clone().into(),
             actions: Vec::new(), // Actions are handled separately by game code
             modifications: self.modifications.iter().cloned().map(Into::into).collect(),
-            outputs: self.outputs.iter().map(|s| FactEventId::new(s)).collect(),
+            outputs: self.outputs.iter().map(FactEventId::new).collect(),
             enabled: self.enabled,
             priority: self.priority,
         }
