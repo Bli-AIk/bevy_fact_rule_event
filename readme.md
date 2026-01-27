@@ -3,7 +3,7 @@
 [![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE) <img src="https://img.shields.io/github/repo-size/Bli-AIk/bevy_fact_rule_event.svg"/> <img src="https://img.shields.io/github/last-commit/Bli-AIk/bevy_fact_rule_event.svg"/> <br>
 <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" />
 
-> Current Status: 🚧 Early Development (v0.1.0)
+> Current Status: 🚧 Early Development
 
 **bevy_fact_rule_event** — A generic, data-driven Fact-Rule-Event (FRE) system for Bevy engine.
 
