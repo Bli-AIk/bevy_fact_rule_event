@@ -3,9 +3,9 @@
 [![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE) <img src="https://img.shields.io/github/repo-size/Bli-AIk/bevy_fact_rule_event.svg"/> <img src="https://img.shields.io/github/last-commit/Bli-AIk/bevy_fact_rule_event.svg"/> <br>
 <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" />
 
-> Current Status: 🚧 Early Development (Initial version in progress)
+> Current Status: 🚧 Early Development (v0.1.0)
 
-**bevy_fact_rule_event** — Fact-Rule-Event system for Bevy engine.
+**bevy_fact_rule_event** — A generic, data-driven Fact-Rule-Event (FRE) system for Bevy engine.
 
 | English | Simplified Chinese          |
 |---------|-----------------------------|
@@ -13,18 +13,31 @@
 
 ## Introduction
 
-`bevy_fact_rule_event` is a<TODO>.  
-It solves<TODO>, allowing users to<TODO>.
+`bevy_fact_rule_event` is a data-driven system that separates game logic from code through a declarative rule engine.  
+It solves the problem of complex, hardcoded game logic by enabling designers to define behavior through external data files, allowing users to modify game behavior without recompiling code.
 
-With `bevy_fact_rule_event`, you only need to<TODO>.  
-In the future, it may also support<TODO>.
+With `bevy_fact_rule_event`, you only need to define rules in RON files and load them as assets - the system automatically evaluates conditions and executes actions based on game events.  
+In the future, it may also support visual rule editors and real-time rule hot-reloading.
+
+## Core Philosophy
+
+> "Events don't contain logic, data doesn't contain behavior, logic only exists in rules."
+
+The FRE system enforces clean separation of concerns:
+- **Facts (F)**: Centralized key-value database for game state
+- **Rules (R)**: Declarative logic that transforms state based on conditions
+- **Events (E)**: Signal broadcasts that trigger rule evaluation
 
 ## Features
 
-*<TODO>
-*<TODO>
-*<TODO>
-* (Planned)<TODO>
+* **Data-Driven Rules**: Define game logic in RON files without code changes
+* **Centralized State Management**: All game facts stored in a queryable database
+* **Conditional Logic**: Complex condition evaluation with nested logic operators
+* **Automatic Asset Loading**: Seamless integration with Bevy's asset system
+* **Event Broadcasting**: Decoupled communication between game systems
+* **Type-Safe Values**: Support for Int, Float, Bool, and String fact types
+* (Planned) Visual Rule Editor
+* (Planned) Hot-Reloading Support
 
 ## How to Use
 
@@ -43,7 +56,66 @@ In the future, it may also support<TODO>.
 3. **Basic usage**:
 
    ```rust
-   //<TODO>
+   use bevy::prelude::*;
+   use bevy_fact_rule_event::prelude::*;
+
+   fn main() {
+       App::new()
+           .add_plugins(DefaultPlugins)
+           .add_plugins(FREPlugin)  // Add FRE plugin
+           .add_systems(Startup, setup_rules)
+           .run();
+   }
+
+   fn setup_rules(
+       asset_server: Res<AssetServer>,
+       mut commands: Commands,
+   ) {
+       // Load rules from file
+       let rules_handle: Handle<RuleSetAsset> = asset_server.load("rules/game_rules.rule.ron");
+       commands.spawn(rules_handle);
+   }
+   ```
+
+4. **Create a rule file** (`assets/rules/game_rules.rule.ron`):
+
+   ```ron
+   (
+       version: 1,
+       initial_facts: {
+           "player_health": Int(100),
+           "score": Int(0),
+       },
+       rules: [
+           (
+               id: "damage_player",
+               trigger: "player_hit",
+               condition: GreaterThan(key: "player_health", value: Int(0)),
+               modifications: [
+                   Decrement(key: "player_health", amount: 10),
+               ],
+               outputs: ["health_changed"],
+           ),
+           (
+               id: "game_over",
+               trigger: "health_changed",
+               condition: LessEqual(key: "player_health", value: Int(0)),
+               actions: ["GameOver"],
+               outputs: ["game_ended"],
+           ),
+       ],
+   )
+   ```
+
+5. **Emit events in your game code**:
+
+   ```rust
+   fn player_collision_system(
+       mut events: ResMut<PendingFactEvents>,
+   ) {
+       // Trigger rule evaluation
+       events.emit("player_hit");
+   }
    ```
 
 ## Dependencies
