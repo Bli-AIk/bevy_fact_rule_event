@@ -1,12 +1,18 @@
 [package]
 name = "bevy_fact_rule_event"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 authors = ["Bli-AIk <haikun2333@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Bli-AIk/bevy_fact_rule_event"
 description = "Fact-Rule-Event system for Bevy engine"
+exclude = [
+    "target/*",
+    ".github/*"
+]
 
 [dependencies]
 bevy = "0.17.2"
 serde = { version = "1.0", features = ["derive"] }
+ron = "0.10"
+anyhow = "1.0"
