@@ -495,6 +495,7 @@ impl RuleRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::FactDatabase;
 
     #[test]
     fn test_rule_condition_evaluation() {
