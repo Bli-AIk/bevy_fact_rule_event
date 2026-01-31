@@ -518,12 +518,12 @@ mod tests {
         let mut db = LayeredFactDatabase::new();
 
         db.set_local("int_val", 42i64);
-        db.set_local("float_val", 3.14f64);
+        db.set_local("float_val", 2.71f64);
         db.set_local("bool_val", true);
         db.set_local("str_val", "hello");
 
         assert_eq!(db.get_int("int_val"), Some(42));
-        assert_eq!(db.get_float("float_val"), Some(3.14));
+        assert_eq!(db.get_float("float_val"), Some(2.71));
         assert_eq!(db.get_bool("bool_val"), Some(true));
         assert_eq!(db.get_string("str_val"), Some("hello"));
 

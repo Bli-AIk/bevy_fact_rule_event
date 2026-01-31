@@ -341,13 +341,13 @@ mod tests {
     #[test]
     fn test_fact_value_type_accessors() {
         let int_val = FactValue::Int(42);
-        let float_val = FactValue::Float(3.14);
+        let float_val = FactValue::Float(2.71);
         let bool_val = FactValue::Bool(true);
         let string_val = FactValue::String("test".to_string());
 
         // Test correct type accessors
         assert_eq!(int_val.as_int(), Some(42));
-        assert_eq!(float_val.as_float(), Some(3.14));
+        assert_eq!(float_val.as_float(), Some(2.71));
         assert_eq!(bool_val.as_bool(), Some(true));
         assert_eq!(string_val.as_string(), Some("test"));
 
@@ -375,8 +375,8 @@ mod tests {
     fn test_fact_value_from_implementations() {
         let from_i64: FactValue = 42i64.into();
         let from_i32: FactValue = 42i32.into();
-        let from_f64: FactValue = 3.14f64.into();
-        let from_f32: FactValue = 3.14f32.into();
+        let from_f64: FactValue = 2.71f64.into();
+        let from_f32: FactValue = 2.71f32.into();
         let from_bool: FactValue = true.into();
         let from_string: FactValue = String::from("test").into();
         let from_str: FactValue = "test".into();
