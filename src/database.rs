@@ -126,6 +126,47 @@ impl From<&str> for FactValue {
     }
 }
 
+/// Trait for read-only fact database access.
+/// Implemented by both `FactDatabase` and `LayeredFactDatabase`.
+///
+/// 事实数据库只读访问的 trait。
+/// 由 `FactDatabase` 和 `LayeredFactDatabase` 实现。
+pub trait FactReader {
+    /// Get a fact value by key.
+    fn get(&self, key: &FactKey) -> Option<&FactValue>;
+
+    /// Get a fact value by string key.
+    fn get_by_str(&self, key: &str) -> Option<&FactValue>;
+
+    /// Get an integer fact value.
+    fn get_int(&self, key: &str) -> Option<i64> {
+        self.get_by_str(key).and_then(|v| v.as_int())
+    }
+
+    /// Get an integer fact value with a default.
+    fn get_int_or(&self, key: &str, default: i64) -> i64 {
+        self.get_int(key).unwrap_or(default)
+    }
+
+    /// Get a float fact value.
+    fn get_float(&self, key: &str) -> Option<f64> {
+        self.get_by_str(key).and_then(|v| v.as_float())
+    }
+
+    /// Get a boolean fact value.
+    fn get_bool(&self, key: &str) -> Option<bool> {
+        self.get_by_str(key).and_then(|v| v.as_bool())
+    }
+
+    /// Get a string fact value.
+    fn get_string(&self, key: &str) -> Option<&str> {
+        self.get_by_str(key).and_then(|v| v.as_string())
+    }
+
+    /// Check if a fact exists.
+    fn contains(&self, key: &str) -> bool;
+}
+
 /// Centralized database for storing facts (game state).
 ///
 /// 用于存储事实（游戏状态）的集中式数据库。
@@ -250,6 +291,20 @@ impl FactDatabase {
     /// 清除数据库中的所有事实。
     pub fn clear(&mut self) {
         self.facts.clear();
+    }
+}
+
+impl FactReader for FactDatabase {
+    fn get(&self, key: &FactKey) -> Option<&FactValue> {
+        self.facts.get(key)
+    }
+
+    fn get_by_str(&self, key: &str) -> Option<&FactValue> {
+        self.facts.get(&FactKey(key.to_string()))
+    }
+
+    fn contains(&self, key: &str) -> bool {
+        self.facts.contains_key(&FactKey(key.to_string()))
     }
 }
 

@@ -6,7 +6,7 @@
 //! 规则定义 - FRE 的逻辑层。
 //! 规则包含触发器、条件、动作、修改和输出。
 
-use crate::database::{FactDatabase, FactValue};
+use crate::database::{FactDatabase, FactReader, FactValue};
 use crate::event::{FactEvent, FactEventId};
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -84,10 +84,10 @@ pub enum RuleCondition {
 }
 
 impl RuleCondition {
-    /// Evaluate the condition against the fact database.
+    /// Evaluate the condition against any fact reader (FactDatabase or LayeredFactDatabase).
     ///
-    /// 根据事实数据库评估条件。
-    pub fn evaluate(&self, db: &FactDatabase) -> bool {
+    /// 根据任何事实读取器（FactDatabase 或 LayeredFactDatabase）评估条件。
+    pub fn evaluate(&self, db: &impl FactReader) -> bool {
         match self {
             RuleCondition::Equals(key, value) => db.get_by_str(key) == Some(value),
 
@@ -273,10 +273,10 @@ impl Rule {
         self.enabled && self.trigger == event.id
     }
 
-    /// Evaluate the condition against the fact database.
+    /// Evaluate the condition against any fact reader.
     ///
-    /// 根据事实数据库评估条件。
-    pub fn check_condition(&self, db: &FactDatabase) -> bool {
+    /// 根据任何事实读取器评估条件。
+    pub fn check_condition(&self, db: &impl FactReader) -> bool {
         self.condition.evaluate(db)
     }
 }

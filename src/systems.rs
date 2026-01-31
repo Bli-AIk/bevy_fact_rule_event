@@ -41,8 +41,8 @@ pub fn process_rules_system(
             .collect();
 
         for rule in matching_rules {
-            // Check condition
-            if !rule.check_condition(&db) {
+            // Check condition (dereference ResMut to get &FactDatabase)
+            if !rule.check_condition(&*db) {
                 continue;
             }
 
