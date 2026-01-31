@@ -531,4 +531,239 @@ mod tests {
         assert_eq!(rule.priority, 10);
         assert!(rule.enabled);
     }
+
+    #[test]
+    fn test_rule_condition_greater_or_equal() {
+        let mut db = FactDatabase::new();
+        db.set("value", 5i64);
+
+        assert!(RuleCondition::GreaterOrEqual("value".to_string(), 5).evaluate(&db));
+        assert!(RuleCondition::GreaterOrEqual("value".to_string(), 4).evaluate(&db));
+        assert!(!RuleCondition::GreaterOrEqual("value".to_string(), 6).evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_less_or_equal() {
+        let mut db = FactDatabase::new();
+        db.set("value", 5i64);
+
+        assert!(RuleCondition::LessOrEqual("value".to_string(), 5).evaluate(&db));
+        assert!(RuleCondition::LessOrEqual("value".to_string(), 6).evaluate(&db));
+        assert!(!RuleCondition::LessOrEqual("value".to_string(), 4).evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_is_false() {
+        let mut db = FactDatabase::new();
+        db.set("flag", false);
+
+        assert!(RuleCondition::IsFalse("flag".to_string()).evaluate(&db));
+        assert!(!RuleCondition::IsTrue("flag".to_string()).evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_and() {
+        let mut db = FactDatabase::new();
+        db.set("a", true);
+        db.set("b", true);
+        db.set("c", false);
+
+        let cond = RuleCondition::And(vec![
+            RuleCondition::IsTrue("a".to_string()),
+            RuleCondition::IsTrue("b".to_string()),
+        ]);
+        assert!(cond.evaluate(&db));
+
+        let cond_false = RuleCondition::And(vec![
+            RuleCondition::IsTrue("a".to_string()),
+            RuleCondition::IsTrue("c".to_string()),
+        ]);
+        assert!(!cond_false.evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_or() {
+        let mut db = FactDatabase::new();
+        db.set("a", true);
+        db.set("b", false);
+
+        let cond = RuleCondition::Or(vec![
+            RuleCondition::IsTrue("a".to_string()),
+            RuleCondition::IsTrue("b".to_string()),
+        ]);
+        assert!(cond.evaluate(&db));
+
+        let cond_all_false = RuleCondition::Or(vec![
+            RuleCondition::IsFalse("a".to_string()),
+            RuleCondition::IsTrue("b".to_string()),
+        ]);
+        assert!(!cond_all_false.evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_not() {
+        let mut db = FactDatabase::new();
+        db.set("flag", false);
+
+        let cond = RuleCondition::Not(Box::new(RuleCondition::IsTrue("flag".to_string())));
+        assert!(cond.evaluate(&db));
+
+        db.set("flag", true);
+        assert!(!cond.evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_always() {
+        let db = FactDatabase::new();
+        assert!(RuleCondition::Always.evaluate(&db));
+    }
+
+    #[test]
+    fn test_fact_modification_set() {
+        let mut db = LayeredFactDatabase::new();
+        let mod_set = FactModification::Set("key".to_string(), FactValue::Int(42));
+        mod_set.apply(&mut db);
+        assert_eq!(db.get_int("key"), Some(42));
+    }
+
+    #[test]
+    fn test_fact_modification_increment() {
+        let mut db = LayeredFactDatabase::new();
+        db.set("counter", 10i64);
+        let mod_inc = FactModification::Increment("counter".to_string(), 5);
+        mod_inc.apply(&mut db);
+        assert_eq!(db.get_int("counter"), Some(15));
+    }
+
+    #[test]
+    fn test_fact_modification_remove() {
+        let mut db = LayeredFactDatabase::new();
+        db.set("to_remove", 100i64);
+        assert!(db.contains("to_remove"));
+
+        let mod_remove = FactModification::Remove("to_remove".to_string());
+        mod_remove.apply(&mut db);
+        assert!(!db.contains_local("to_remove"));
+    }
+
+    #[test]
+    fn test_fact_modification_toggle() {
+        let mut db = LayeredFactDatabase::new();
+        db.set("flag", false);
+
+        let mod_toggle = FactModification::Toggle("flag".to_string());
+        mod_toggle.apply(&mut db);
+        assert_eq!(db.get_bool("flag"), Some(true));
+
+        mod_toggle.apply(&mut db);
+        assert_eq!(db.get_bool("flag"), Some(false));
+    }
+
+    #[test]
+    fn test_fact_modification_toggle_missing_key() {
+        let mut db = LayeredFactDatabase::new();
+        // Toggle on missing key should default to false, then toggle to true
+        let mod_toggle = FactModification::Toggle("missing".to_string());
+        mod_toggle.apply(&mut db);
+        assert_eq!(db.get_bool("missing"), Some(true));
+    }
+
+    #[test]
+    fn test_rule_registry_basic() {
+        let mut registry = RuleRegistry::new();
+        assert!(registry.is_empty());
+        assert_eq!(registry.len(), 0);
+
+        let rule = Rule::builder("rule1", "event1").build();
+        registry.register(rule);
+
+        assert!(!registry.is_empty());
+        assert_eq!(registry.len(), 1);
+        assert!(registry.get("rule1").is_some());
+        assert!(registry.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_rule_registry_unregister() {
+        let mut registry = RuleRegistry::new();
+        let rule = Rule::builder("rule1", "event1").build();
+        registry.register(rule);
+
+        let unregistered = registry.unregister("rule1");
+        assert!(unregistered.is_some());
+        assert!(registry.is_empty());
+
+        // Unregister non-existent
+        let unregistered_none = registry.unregister("nonexistent");
+        assert!(unregistered_none.is_none());
+    }
+
+    #[test]
+    fn test_rule_registry_set_enabled() {
+        let mut registry = RuleRegistry::new();
+        let rule = Rule::builder("rule1", "event1").build();
+        registry.register(rule);
+
+        assert!(registry.get("rule1").unwrap().enabled);
+
+        registry.set_enabled("rule1", false);
+        assert!(!registry.get("rule1").unwrap().enabled);
+
+        registry.set_enabled("rule1", true);
+        assert!(registry.get("rule1").unwrap().enabled);
+    }
+
+    #[test]
+    fn test_rule_registry_get_matching_rules() {
+        let mut registry = RuleRegistry::new();
+
+        let rule1 = Rule::builder("rule1", "event_a").priority(10).build();
+        let rule2 = Rule::builder("rule2", "event_a").priority(5).build();
+        let rule3 = Rule::builder("rule3", "event_b").priority(20).build();
+
+        registry.register(rule1);
+        registry.register(rule2);
+        registry.register(rule3);
+
+        let event_a = FactEvent::new("event_a");
+        let matching = registry.get_matching_rules(&event_a);
+
+        // Should match rule1 and rule2, sorted by priority (higher first)
+        assert_eq!(matching.len(), 2);
+        assert_eq!(matching[0].id, "rule1"); // priority 10
+        assert_eq!(matching[1].id, "rule2"); // priority 5
+    }
+
+    #[test]
+    fn test_rule_registry_iter() {
+        let mut registry = RuleRegistry::new();
+        registry.register(Rule::builder("r1", "e1").build());
+        registry.register(Rule::builder("r2", "e2").build());
+        registry.register(Rule::builder("r3", "e3").build());
+
+        let count = registry.iter().count();
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn test_rule_builder_enabled_false() {
+        let rule = Rule::builder("disabled_rule", "event")
+            .enabled(false)
+            .build();
+
+        assert!(!rule.enabled);
+    }
+
+    #[test]
+    fn test_rule_matches_disabled() {
+        let mut registry = RuleRegistry::new();
+        let rule = Rule::builder("rule1", "event_a").enabled(false).build();
+        registry.register(rule);
+
+        let event_a = FactEvent::new("event_a");
+        let matching = registry.get_matching_rules(&event_a);
+
+        // Disabled rules should not match
+        assert!(matching.is_empty());
+    }
 }

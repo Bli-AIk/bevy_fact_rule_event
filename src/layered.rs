@@ -417,4 +417,209 @@ mod tests {
         assert_eq!(db.get_int("counter"), Some(15)); // Local takes priority
         assert_eq!(db.global().get_int("counter"), Some(10)); // Global unchanged
     }
+
+    #[test]
+    fn test_copy_to_global() {
+        let mut db = LayeredFactDatabase::new();
+
+        db.set_local("data", "important");
+        assert!(db.copy_to_global("data"));
+
+        // Both layers now have the value
+        assert!(db.contains_local("data"));
+        assert!(db.contains_global("data"));
+        assert_eq!(db.local().get_string("data"), Some("important"));
+        assert_eq!(db.global().get_string("data"), Some("important"));
+    }
+
+    #[test]
+    fn test_copy_to_global_nonexistent() {
+        let mut db = LayeredFactDatabase::new();
+        assert!(!db.copy_to_global("nonexistent"));
+    }
+
+    #[test]
+    fn test_demote_to_local() {
+        let mut db = LayeredFactDatabase::new();
+
+        db.set_global("global_data", 100i64);
+        assert!(db.demote_to_local("global_data"));
+
+        assert!(!db.contains_global("global_data"));
+        assert!(db.contains_local("global_data"));
+        assert_eq!(db.get_int("global_data"), Some(100));
+    }
+
+    #[test]
+    fn test_demote_to_local_nonexistent() {
+        let mut db = LayeredFactDatabase::new();
+        assert!(!db.demote_to_local("nonexistent"));
+    }
+
+    #[test]
+    fn test_promote_to_global_nonexistent() {
+        let mut db = LayeredFactDatabase::new();
+        assert!(!db.promote_to_global("nonexistent"));
+    }
+
+    #[test]
+    fn test_remove_operations() {
+        let mut db = LayeredFactDatabase::new();
+
+        db.set_local("local_key", 1i64);
+        db.set_global("global_key", 2i64);
+
+        // Remove from local
+        let removed_local = db.remove("local_key");
+        assert_eq!(removed_local, Some(FactValue::Int(1)));
+        assert!(!db.contains_local("local_key"));
+
+        // Remove from global
+        let removed_global = db.remove_global("global_key");
+        assert_eq!(removed_global, Some(FactValue::Int(2)));
+        assert!(!db.contains_global("global_key"));
+    }
+
+    #[test]
+    fn test_clear_all() {
+        let mut db = LayeredFactDatabase::new();
+
+        db.set_local("local", 1i64);
+        db.set_global("global", 2i64);
+        assert!(!db.is_empty());
+
+        db.clear_all();
+        assert!(db.is_empty());
+        assert_eq!(db.len(), 0);
+        assert_eq!(db.local_len(), 0);
+        assert_eq!(db.global_len(), 0);
+    }
+
+    #[test]
+    fn test_len_operations() {
+        let mut db = LayeredFactDatabase::new();
+        assert_eq!(db.len(), 0);
+        assert_eq!(db.local_len(), 0);
+        assert_eq!(db.global_len(), 0);
+        assert!(db.is_empty());
+
+        db.set_local("l1", 1i64);
+        db.set_local("l2", 2i64);
+        db.set_global("g1", 3i64);
+
+        assert_eq!(db.local_len(), 2);
+        assert_eq!(db.global_len(), 1);
+        assert_eq!(db.len(), 3);
+        assert!(!db.is_empty());
+    }
+
+    #[test]
+    fn test_get_typed_values() {
+        let mut db = LayeredFactDatabase::new();
+
+        db.set_local("int_val", 42i64);
+        db.set_local("float_val", 3.14f64);
+        db.set_local("bool_val", true);
+        db.set_local("str_val", "hello");
+
+        assert_eq!(db.get_int("int_val"), Some(42));
+        assert_eq!(db.get_float("float_val"), Some(3.14));
+        assert_eq!(db.get_bool("bool_val"), Some(true));
+        assert_eq!(db.get_string("str_val"), Some("hello"));
+
+        // Test defaults
+        assert_eq!(db.get_int_or("int_val", 0), 42);
+        assert_eq!(db.get_int_or("missing", 100), 100);
+    }
+
+    #[test]
+    fn test_contains_both_layers() {
+        let mut db = LayeredFactDatabase::new();
+
+        db.set_local("local", 1i64);
+        db.set_global("global", 2i64);
+
+        // contains() checks both layers
+        assert!(db.contains("local"));
+        assert!(db.contains("global"));
+        assert!(!db.contains("missing"));
+    }
+
+    #[test]
+    fn test_get_by_fact_key() {
+        let mut db = LayeredFactDatabase::new();
+
+        db.set_local("test_key", 42i64);
+        let key = FactKey::new("test_key");
+
+        assert_eq!(db.get(&key), Some(&FactValue::Int(42)));
+    }
+
+    #[test]
+    fn test_increment_global() {
+        let mut db = LayeredFactDatabase::new();
+
+        db.set_global("global_counter", 10i64);
+        db.increment_global("global_counter", 5);
+
+        assert_eq!(db.global().get_int("global_counter"), Some(15));
+    }
+
+    #[test]
+    fn test_increment_creates_if_missing() {
+        let mut db = LayeredFactDatabase::new();
+
+        // Should create with the increment value
+        db.increment("new_counter", 10);
+        assert_eq!(db.get_int("new_counter"), Some(10));
+
+        db.increment_global("new_global_counter", 20);
+        assert_eq!(db.global().get_int("new_global_counter"), Some(20));
+    }
+
+    #[test]
+    fn test_direct_layer_access() {
+        let mut db = LayeredFactDatabase::new();
+
+        // Access local layer directly
+        db.local_mut().set("direct_local", 1i64);
+        assert_eq!(db.local().get_int("direct_local"), Some(1));
+
+        // Access global layer directly
+        db.global_mut().set("direct_global", 2i64);
+        assert_eq!(db.global().get_int("direct_global"), Some(2));
+    }
+
+    #[test]
+    fn test_fact_reader_trait_impl() {
+        let mut db = LayeredFactDatabase::new();
+        db.set_global("global_fact", 100i64);
+        db.set_local("local_fact", 200i64);
+
+        fn check_reader(reader: &impl FactReader) {
+            assert!(reader.contains("global_fact"));
+            assert!(reader.contains("local_fact"));
+            assert!(!reader.contains("missing"));
+            assert_eq!(reader.get_int("global_fact"), Some(100));
+            assert_eq!(reader.get_int("local_fact"), Some(200));
+        }
+
+        check_reader(&db);
+    }
+
+    #[test]
+    fn test_string_fallback_to_global() {
+        let mut db = LayeredFactDatabase::new();
+
+        db.set_global("player_name", "GlobalPlayer");
+        assert_eq!(db.get_string("player_name"), Some("GlobalPlayer"));
+
+        // Override with local
+        db.set_local("player_name", "LocalPlayer");
+        assert_eq!(db.get_string("player_name"), Some("LocalPlayer"));
+
+        // Clear local, should fallback
+        db.clear_local();
+        assert_eq!(db.get_string("player_name"), Some("GlobalPlayer"));
+    }
 }
