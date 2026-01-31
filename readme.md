@@ -11,6 +11,13 @@
 |---------|-----------------------------|
 | English | [简体中文](./readme_zh-hans.md) |
 
+## Acknowledgements
+
+This FRE system is deeply inspired by **aarthificial**'s brilliant work on data-driven game logic. We express our sincere gratitude and admiration for these foundational ideas:
+
+- [📺 Dynamic Conversations - Legacy Devlog #23](https://www.youtube.com/watch?v=1LlF5p5Od6A) 
+- [📺 Implicit Choices - Legacy Devlog #24](https://www.youtube.com/watch?v=yAIH7GGZ9L0)
+
 ## Introduction
 
 `bevy_fact_rule_event` is a data-driven system that separates game logic from code through a declarative rule engine.  
@@ -31,13 +38,41 @@ The FRE system enforces clean separation of concerns:
 ## Features
 
 * **Data-Driven Rules**: Define game logic in RON files without code changes
+* **Layered Fact Database**: Hierarchical state management with Global and Local layers
+  - Global layer: Persistent facts that survive scene changes (e.g., player stats)
+  - Local layer: Temporary facts scoped to current context (e.g., battle state)
 * **Centralized State Management**: All game facts stored in a queryable database
 * **Conditional Logic**: Complex condition evaluation with nested logic operators
 * **Automatic Asset Loading**: Seamless integration with Bevy's asset system
 * **Event Broadcasting**: Decoupled communication between game systems
 * **Type-Safe Values**: Support for Int, Float, Bool, and String fact types
+* **Bidirectional Sync**: Facts can sync with ECS components for reactive UI updates
 * (Planned) Visual Rule Editor
 * (Planned) Hot-Reloading Support
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   LayeredFactDatabase                        │
+├─────────────────────────────────────────────────────────────┤
+│  Global Layer (persistent)     │  Local Layer (temporary)   │
+│  ─────────────────────────     │  ──────────────────────    │
+│  • player_hp, player_lv        │  • battle_turn_count       │
+│  • player_gold, player_name    │  • current_enemy_hp        │
+│  • inventory_items             │  • dialogue_state          │
+│                                │  (cleared on context exit) │
+├─────────────────────────────────────────────────────────────┤
+│              ↓ Read (local overrides global) ↓               │
+│              ↑ Write (choose target layer)   ↑               │
+└─────────────────────────────────────────────────────────────┘
+            ↕                                      ↕
+    ┌───────────────┐                    ┌──────────────────┐
+    │  Rule Engine  │←── triggers ──────→│   Game Events    │
+    │ (evaluates    │                    │ (FactEvent)      │
+    │  conditions)  │                    └──────────────────┘
+    └───────────────┘
+```
 
 ## How to Use
 
@@ -77,7 +112,29 @@ The FRE system enforces clean separation of concerns:
    }
    ```
 
-4. **Create a rule file** (`assets/rules/game_rules.rule.ron`):
+4. **Using the Layered Database**:
+
+   ```rust
+   fn update_player_stats(
+       mut layered_db: ResMut<LayeredFactDatabase>,
+   ) {
+       // Write to global layer (persistent)
+       layered_db.set_global("player_hp", 100i64);
+       layered_db.set_global("player_name", "Chara".to_string());
+       
+       // Write to local layer (temporary, for current context)
+       layered_db.set("battle_turn", 1i64);
+       
+       // Read (local layer takes priority over global)
+       let hp = layered_db.get_int("player_hp").unwrap_or(20);
+       let name = layered_db.get_string("player_name").unwrap_or("???");
+       
+       // Clear local layer when leaving context
+       layered_db.clear_local();
+   }
+   ```
+
+5. **Create a rule file** (`assets/rules/game_rules.rule.ron`):
 
    ```ron
    (
@@ -107,7 +164,7 @@ The FRE system enforces clean separation of concerns:
    )
    ```
 
-5. **Emit events in your game code**:
+6. **Emit events in your game code**:
 
    ```rust
    fn player_collision_system(
