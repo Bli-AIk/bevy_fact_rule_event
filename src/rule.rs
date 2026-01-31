@@ -16,7 +16,7 @@ use std::sync::Arc;
 /// Condition predicate for checking facts.
 ///
 /// 用于检查事实的条件谓词。
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum RuleCondition {
     /// Check if a fact equals a specific value.
     ///
@@ -482,6 +482,13 @@ impl RuleRegistry {
     /// 检查注册表是否为空。
     pub fn is_empty(&self) -> bool {
         self.rules.is_empty()
+    }
+
+    /// Iterate over all rules in the registry.
+    ///
+    /// 迭代注册表中的所有规则。
+    pub fn iter(&self) -> impl Iterator<Item = &Rule> {
+        self.rules.values()
     }
 }
 
