@@ -58,8 +58,7 @@ pub struct FREPlugin;
 
 impl Plugin for FREPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<FactDatabase>()
-            .init_resource::<LayeredFactDatabase>()
+        app.init_resource::<LayeredFactDatabase>()
             .init_resource::<RuleRegistry>()
             .init_resource::<ActionHandlerRegistry>()
             .init_resource::<systems::PendingFactEvents>()

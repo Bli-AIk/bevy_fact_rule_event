@@ -346,7 +346,7 @@ impl AssetLoader for RuleSetAssetLoader {
 ///
 /// 动作处理函数的类型别名。
 pub type ActionHandler =
-    Box<dyn Fn(&RuleActionDef, &crate::FactDatabase, &mut Commands) + Send + Sync>;
+    Box<dyn Fn(&RuleActionDef, &crate::LayeredFactDatabase, &mut Commands) + Send + Sync>;
 
 /// Registry for custom action handlers.
 /// Games can register handlers for specific action types.
@@ -364,7 +364,7 @@ impl ActionHandlerRegistry {
     /// 为特定动作类型注册处理程序。
     pub fn register<F>(&mut self, action_type: &str, handler: F)
     where
-        F: Fn(&RuleActionDef, &crate::FactDatabase, &mut Commands) + Send + Sync + 'static,
+        F: Fn(&RuleActionDef, &crate::LayeredFactDatabase, &mut Commands) + Send + Sync + 'static,
     {
         self.handlers
             .insert(action_type.to_string(), Box::new(handler));
@@ -376,7 +376,7 @@ impl ActionHandlerRegistry {
     pub fn execute(
         &self,
         action: &RuleActionDef,
-        db: &crate::FactDatabase,
+        db: &crate::LayeredFactDatabase,
         commands: &mut Commands,
     ) {
         let action_type = match action {

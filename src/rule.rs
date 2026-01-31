@@ -6,8 +6,9 @@
 //! 规则定义 - FRE 的逻辑层。
 //! 规则包含触发器、条件、动作、修改和输出。
 
-use crate::database::{FactDatabase, FactReader, FactValue};
+use crate::database::{FactReader, FactValue};
 use crate::event::{FactEvent, FactEventId};
+use crate::layered::LayeredFactDatabase;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -153,13 +154,13 @@ pub enum FactModification {
 }
 
 impl FactModification {
-    /// Apply the modification to the fact database.
+    /// Apply the modification to the layered fact database (local layer by default).
     ///
-    /// 将修改应用于事实数据库。
-    pub fn apply(&self, db: &mut FactDatabase) {
+    /// 将修改应用于分层事实数据库（默认为局部层）。
+    pub fn apply(&self, db: &mut LayeredFactDatabase) {
         match self {
             FactModification::Set(key, value) => {
-                db.set(key.as_str(), value.clone());
+                db.set_local(key.as_str(), value.clone());
             }
             FactModification::Increment(key, amount) => {
                 db.increment(key, *amount);
@@ -169,7 +170,7 @@ impl FactModification {
             }
             FactModification::Toggle(key) => {
                 let current = db.get_bool(key).unwrap_or(false);
-                db.set(key.as_str(), !current);
+                db.set_local(key.as_str(), !current);
             }
         }
     }
@@ -181,7 +182,7 @@ impl FactModification {
 /// 规则触发时执行的动作。
 /// 动作是可以修改游戏状态的回调。
 pub type RuleActionFn =
-    Arc<dyn Fn(&FactEvent, &FactDatabase, &mut bevy::ecs::system::Commands) + Send + Sync>;
+    Arc<dyn Fn(&FactEvent, &LayeredFactDatabase, &mut bevy::ecs::system::Commands) + Send + Sync>;
 
 /// Wrapper for rule actions.
 ///
@@ -197,7 +198,10 @@ impl RuleAction {
     /// 从闭包创建新动作。
     pub fn new<F>(f: F) -> Self
     where
-        F: Fn(&FactEvent, &FactDatabase, &mut bevy::ecs::system::Commands) + Send + Sync + 'static,
+        F: Fn(&FactEvent, &LayeredFactDatabase, &mut bevy::ecs::system::Commands)
+            + Send
+            + Sync
+            + 'static,
     {
         Self {
             action: Arc::new(f),
@@ -207,7 +211,7 @@ impl RuleAction {
     /// Execute the action.
     ///
     /// 执行动作。
-    pub fn execute(&self, event: &FactEvent, db: &FactDatabase, commands: &mut Commands) {
+    pub fn execute(&self, event: &FactEvent, db: &LayeredFactDatabase, commands: &mut Commands) {
         (self.action)(event, db, commands);
     }
 }
