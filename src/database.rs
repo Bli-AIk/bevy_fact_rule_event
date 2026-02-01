@@ -126,6 +126,47 @@ impl From<&str> for FactValue {
     }
 }
 
+/// Trait for read-only fact database access.
+/// Implemented by both `FactDatabase` and `LayeredFactDatabase`.
+///
+/// 事实数据库只读访问的 trait。
+/// 由 `FactDatabase` 和 `LayeredFactDatabase` 实现。
+pub trait FactReader {
+    /// Get a fact value by key.
+    fn get(&self, key: &FactKey) -> Option<&FactValue>;
+
+    /// Get a fact value by string key.
+    fn get_by_str(&self, key: &str) -> Option<&FactValue>;
+
+    /// Get an integer fact value.
+    fn get_int(&self, key: &str) -> Option<i64> {
+        self.get_by_str(key).and_then(|v| v.as_int())
+    }
+
+    /// Get an integer fact value with a default.
+    fn get_int_or(&self, key: &str, default: i64) -> i64 {
+        self.get_int(key).unwrap_or(default)
+    }
+
+    /// Get a float fact value.
+    fn get_float(&self, key: &str) -> Option<f64> {
+        self.get_by_str(key).and_then(|v| v.as_float())
+    }
+
+    /// Get a boolean fact value.
+    fn get_bool(&self, key: &str) -> Option<bool> {
+        self.get_by_str(key).and_then(|v| v.as_bool())
+    }
+
+    /// Get a string fact value.
+    fn get_string(&self, key: &str) -> Option<&str> {
+        self.get_by_str(key).and_then(|v| v.as_string())
+    }
+
+    /// Check if a fact exists.
+    fn contains(&self, key: &str) -> bool;
+}
+
 /// Centralized database for storing facts (game state).
 ///
 /// 用于存储事实（游戏状态）的集中式数据库。
@@ -253,6 +294,20 @@ impl FactDatabase {
     }
 }
 
+impl FactReader for FactDatabase {
+    fn get(&self, key: &FactKey) -> Option<&FactValue> {
+        self.facts.get(key)
+    }
+
+    fn get_by_str(&self, key: &str) -> Option<&FactValue> {
+        self.facts.get(&FactKey(key.to_string()))
+    }
+
+    fn contains(&self, key: &str) -> bool {
+        self.facts.contains_key(&FactKey(key.to_string()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,5 +336,149 @@ mod tests {
 
         db.increment("counter", 5);
         assert_eq!(db.get_int("counter"), Some(6));
+    }
+
+    #[test]
+    fn test_fact_value_type_accessors() {
+        let int_val = FactValue::Int(42);
+        let float_val = FactValue::Float(2.71);
+        let bool_val = FactValue::Bool(true);
+        let string_val = FactValue::String("test".to_string());
+
+        // Test correct type accessors
+        assert_eq!(int_val.as_int(), Some(42));
+        assert_eq!(float_val.as_float(), Some(2.71));
+        assert_eq!(bool_val.as_bool(), Some(true));
+        assert_eq!(string_val.as_string(), Some("test"));
+
+        // Test wrong type accessors return None
+        assert_eq!(int_val.as_float(), None);
+        assert_eq!(float_val.as_int(), None);
+        assert_eq!(bool_val.as_string(), None);
+        assert_eq!(string_val.as_bool(), None);
+    }
+
+    #[test]
+    fn test_fact_key_from_implementations() {
+        let key_from_str: FactKey = "test_key".into();
+        let key_from_string: FactKey = String::from("test_key").into();
+        let key_new = FactKey::new("test_key");
+
+        assert_eq!(key_from_str.0, "test_key");
+        assert_eq!(key_from_string.0, "test_key");
+        assert_eq!(key_new.0, "test_key");
+        assert_eq!(key_from_str, key_from_string);
+        assert_eq!(key_from_str, key_new);
+    }
+
+    #[test]
+    fn test_fact_value_from_implementations() {
+        let from_i64: FactValue = 42i64.into();
+        let from_i32: FactValue = 42i32.into();
+        let from_f64: FactValue = 2.71f64.into();
+        let from_f32: FactValue = 2.71f32.into();
+        let from_bool: FactValue = true.into();
+        let from_string: FactValue = String::from("test").into();
+        let from_str: FactValue = "test".into();
+
+        assert_eq!(from_i64.as_int(), Some(42));
+        assert_eq!(from_i32.as_int(), Some(42));
+        assert!(from_f64.as_float().is_some());
+        assert!(from_f32.as_float().is_some());
+        assert_eq!(from_bool.as_bool(), Some(true));
+        assert_eq!(from_string.as_string(), Some("test"));
+        assert_eq!(from_str.as_string(), Some("test"));
+    }
+
+    #[test]
+    fn test_fact_database_remove() {
+        let mut db = FactDatabase::new();
+        db.set("key", 100i64);
+        assert!(db.contains("key"));
+
+        let removed = db.remove("key");
+        assert_eq!(removed, Some(FactValue::Int(100)));
+        assert!(!db.contains("key"));
+
+        // Remove non-existent key
+        let removed_none = db.remove("nonexistent");
+        assert_eq!(removed_none, None);
+    }
+
+    #[test]
+    fn test_fact_database_clear() {
+        let mut db = FactDatabase::new();
+        db.set("key1", 1i64);
+        db.set("key2", 2i64);
+        db.set("key3", 3i64);
+        assert_eq!(db.len(), 3);
+        assert!(!db.is_empty());
+
+        db.clear();
+        assert_eq!(db.len(), 0);
+        assert!(db.is_empty());
+    }
+
+    #[test]
+    fn test_fact_database_iter() {
+        let mut db = FactDatabase::new();
+        db.set("a", 1i64);
+        db.set("b", 2i64);
+        db.set("c", 3i64);
+
+        let count = db.iter().count();
+        assert_eq!(count, 3);
+
+        // Verify all keys are present
+        let keys: Vec<_> = db.iter().map(|(k, _)| k.0.as_str()).collect();
+        assert!(keys.contains(&"a"));
+        assert!(keys.contains(&"b"));
+        assert!(keys.contains(&"c"));
+    }
+
+    #[test]
+    fn test_fact_database_get_int_or_default() {
+        let mut db = FactDatabase::new();
+        db.set("existing", 100i64);
+
+        assert_eq!(db.get_int_or("existing", 0), 100);
+        assert_eq!(db.get_int_or("missing", 42), 42);
+    }
+
+    #[test]
+    fn test_fact_reader_trait() {
+        let mut db = FactDatabase::new();
+        db.set("health", 100i64);
+        db.set("name", "Hero");
+        db.set("alive", true);
+        db.set("speed", 2.5f64);
+
+        fn check_facts(reader: &impl FactReader) {
+            assert_eq!(reader.get_int("health"), Some(100));
+            assert_eq!(reader.get_int_or("health", 0), 100);
+            assert_eq!(reader.get_int_or("missing", 50), 50);
+            assert_eq!(reader.get_string("name"), Some("Hero"));
+            assert_eq!(reader.get_bool("alive"), Some(true));
+            assert_eq!(reader.get_float("speed"), Some(2.5));
+            assert!(reader.contains("health"));
+            assert!(!reader.contains("missing"));
+        }
+
+        check_facts(&db);
+    }
+
+    #[test]
+    fn test_fact_database_overwrite() {
+        let mut db = FactDatabase::new();
+        db.set("key", 1i64);
+        assert_eq!(db.get_int("key"), Some(1));
+
+        db.set("key", 2i64);
+        assert_eq!(db.get_int("key"), Some(2));
+
+        // Can change type
+        db.set("key", "string_value");
+        assert_eq!(db.get_string("key"), Some("string_value"));
+        assert_eq!(db.get_int("key"), None);
     }
 }

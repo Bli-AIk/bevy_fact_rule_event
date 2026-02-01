@@ -4,8 +4,8 @@
 //!
 //! FRE 循环处理的核心系统。
 
-use crate::database::FactDatabase;
 use crate::event::FactEvent;
+use crate::layered::LayeredFactDatabase;
 use crate::rule::RuleRegistry;
 use bevy::prelude::*;
 
@@ -17,15 +17,15 @@ pub struct PendingFactEvents {
     pub events: Vec<FactEvent>,
 }
 
-/// Main system for processing the FRE loop:
+/// Main system for processing the FRE loop using LayeredFactDatabase:
 /// Listen to Events -> Find matching Rules -> Check Fact conditions -> Execute Actions/Modifications -> Queue output Events
 ///
-/// 处理 FRE 循环的主系统：
+/// 使用 LayeredFactDatabase 处理 FRE 循环的主系统：
 /// 监听事件 -> 查找匹配规则 -> 检查事实条件 -> 执行动作/修改 -> 排队输出事件
 pub fn process_rules_system(
     mut commands: Commands,
     mut events: MessageReader<FactEvent>,
-    mut db: ResMut<FactDatabase>,
+    mut layered_db: ResMut<LayeredFactDatabase>,
     mut registry: ResMut<RuleRegistry>,
     mut pending_events: ResMut<PendingFactEvents>,
 ) {
@@ -41,8 +41,8 @@ pub fn process_rules_system(
             .collect();
 
         for rule in matching_rules {
-            // Check condition
-            if !rule.check_condition(&db) {
+            // Check condition using LayeredFactDatabase (local-first, then global)
+            if !rule.check_condition(&*layered_db) {
                 continue;
             }
 
@@ -53,12 +53,12 @@ pub fn process_rules_system(
 
             // Execute actions
             for action in &rule.actions {
-                action.execute(&event, &db, &mut commands);
+                action.execute(&event, &layered_db, &mut commands);
             }
 
-            // Apply modifications
+            // Apply modifications to LayeredFactDatabase (local layer)
             for modification in &rule.modifications {
-                modification.apply(&mut db);
+                modification.apply(&mut layered_db);
             }
 
             // Queue output events for next frame
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_fact_modification_apply() {
-        let mut db = FactDatabase::new();
+        let mut db = LayeredFactDatabase::new();
 
         FactModification::Set("counter".to_string(), FactValue::Int(0)).apply(&mut db);
         assert_eq!(db.get_int("counter"), Some(0));

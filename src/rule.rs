@@ -6,8 +6,9 @@
 //! 规则定义 - FRE 的逻辑层。
 //! 规则包含触发器、条件、动作、修改和输出。
 
-use crate::database::{FactDatabase, FactValue};
+use crate::database::{FactReader, FactValue};
 use crate::event::{FactEvent, FactEventId};
+use crate::layered::LayeredFactDatabase;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,7 +16,7 @@ use std::sync::Arc;
 /// Condition predicate for checking facts.
 ///
 /// 用于检查事实的条件谓词。
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum RuleCondition {
     /// Check if a fact equals a specific value.
     ///
@@ -84,10 +85,10 @@ pub enum RuleCondition {
 }
 
 impl RuleCondition {
-    /// Evaluate the condition against the fact database.
+    /// Evaluate the condition against any fact reader (FactDatabase or LayeredFactDatabase).
     ///
-    /// 根据事实数据库评估条件。
-    pub fn evaluate(&self, db: &FactDatabase) -> bool {
+    /// 根据任何事实读取器（FactDatabase 或 LayeredFactDatabase）评估条件。
+    pub fn evaluate(&self, db: &impl FactReader) -> bool {
         match self {
             RuleCondition::Equals(key, value) => db.get_by_str(key) == Some(value),
 
@@ -153,13 +154,13 @@ pub enum FactModification {
 }
 
 impl FactModification {
-    /// Apply the modification to the fact database.
+    /// Apply the modification to the layered fact database (local layer by default).
     ///
-    /// 将修改应用于事实数据库。
-    pub fn apply(&self, db: &mut FactDatabase) {
+    /// 将修改应用于分层事实数据库（默认为局部层）。
+    pub fn apply(&self, db: &mut LayeredFactDatabase) {
         match self {
             FactModification::Set(key, value) => {
-                db.set(key.as_str(), value.clone());
+                db.set_local(key.as_str(), value.clone());
             }
             FactModification::Increment(key, amount) => {
                 db.increment(key, *amount);
@@ -169,7 +170,7 @@ impl FactModification {
             }
             FactModification::Toggle(key) => {
                 let current = db.get_bool(key).unwrap_or(false);
-                db.set(key.as_str(), !current);
+                db.set_local(key.as_str(), !current);
             }
         }
     }
@@ -181,7 +182,7 @@ impl FactModification {
 /// 规则触发时执行的动作。
 /// 动作是可以修改游戏状态的回调。
 pub type RuleActionFn =
-    Arc<dyn Fn(&FactEvent, &FactDatabase, &mut bevy::ecs::system::Commands) + Send + Sync>;
+    Arc<dyn Fn(&FactEvent, &LayeredFactDatabase, &mut bevy::ecs::system::Commands) + Send + Sync>;
 
 /// Wrapper for rule actions.
 ///
@@ -197,7 +198,10 @@ impl RuleAction {
     /// 从闭包创建新动作。
     pub fn new<F>(f: F) -> Self
     where
-        F: Fn(&FactEvent, &FactDatabase, &mut bevy::ecs::system::Commands) + Send + Sync + 'static,
+        F: Fn(&FactEvent, &LayeredFactDatabase, &mut bevy::ecs::system::Commands)
+            + Send
+            + Sync
+            + 'static,
     {
         Self {
             action: Arc::new(f),
@@ -207,7 +211,7 @@ impl RuleAction {
     /// Execute the action.
     ///
     /// 执行动作。
-    pub fn execute(&self, event: &FactEvent, db: &FactDatabase, commands: &mut Commands) {
+    pub fn execute(&self, event: &FactEvent, db: &LayeredFactDatabase, commands: &mut Commands) {
         (self.action)(event, db, commands);
     }
 }
@@ -273,10 +277,10 @@ impl Rule {
         self.enabled && self.trigger == event.id
     }
 
-    /// Evaluate the condition against the fact database.
+    /// Evaluate the condition against any fact reader.
     ///
-    /// 根据事实数据库评估条件。
-    pub fn check_condition(&self, db: &FactDatabase) -> bool {
+    /// 根据任何事实读取器评估条件。
+    pub fn check_condition(&self, db: &impl FactReader) -> bool {
         self.condition.evaluate(db)
     }
 }
@@ -479,11 +483,19 @@ impl RuleRegistry {
     pub fn is_empty(&self) -> bool {
         self.rules.is_empty()
     }
+
+    /// Iterate over all rules in the registry.
+    ///
+    /// 迭代注册表中的所有规则。
+    pub fn iter(&self) -> impl Iterator<Item = &Rule> {
+        self.rules.values()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::FactDatabase;
 
     #[test]
     fn test_rule_condition_evaluation() {
@@ -518,5 +530,240 @@ mod tests {
         assert_eq!(rule.trigger.0, "test_event");
         assert_eq!(rule.priority, 10);
         assert!(rule.enabled);
+    }
+
+    #[test]
+    fn test_rule_condition_greater_or_equal() {
+        let mut db = FactDatabase::new();
+        db.set("value", 5i64);
+
+        assert!(RuleCondition::GreaterOrEqual("value".to_string(), 5).evaluate(&db));
+        assert!(RuleCondition::GreaterOrEqual("value".to_string(), 4).evaluate(&db));
+        assert!(!RuleCondition::GreaterOrEqual("value".to_string(), 6).evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_less_or_equal() {
+        let mut db = FactDatabase::new();
+        db.set("value", 5i64);
+
+        assert!(RuleCondition::LessOrEqual("value".to_string(), 5).evaluate(&db));
+        assert!(RuleCondition::LessOrEqual("value".to_string(), 6).evaluate(&db));
+        assert!(!RuleCondition::LessOrEqual("value".to_string(), 4).evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_is_false() {
+        let mut db = FactDatabase::new();
+        db.set("flag", false);
+
+        assert!(RuleCondition::IsFalse("flag".to_string()).evaluate(&db));
+        assert!(!RuleCondition::IsTrue("flag".to_string()).evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_and() {
+        let mut db = FactDatabase::new();
+        db.set("a", true);
+        db.set("b", true);
+        db.set("c", false);
+
+        let cond = RuleCondition::And(vec![
+            RuleCondition::IsTrue("a".to_string()),
+            RuleCondition::IsTrue("b".to_string()),
+        ]);
+        assert!(cond.evaluate(&db));
+
+        let cond_false = RuleCondition::And(vec![
+            RuleCondition::IsTrue("a".to_string()),
+            RuleCondition::IsTrue("c".to_string()),
+        ]);
+        assert!(!cond_false.evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_or() {
+        let mut db = FactDatabase::new();
+        db.set("a", true);
+        db.set("b", false);
+
+        let cond = RuleCondition::Or(vec![
+            RuleCondition::IsTrue("a".to_string()),
+            RuleCondition::IsTrue("b".to_string()),
+        ]);
+        assert!(cond.evaluate(&db));
+
+        let cond_all_false = RuleCondition::Or(vec![
+            RuleCondition::IsFalse("a".to_string()),
+            RuleCondition::IsTrue("b".to_string()),
+        ]);
+        assert!(!cond_all_false.evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_not() {
+        let mut db = FactDatabase::new();
+        db.set("flag", false);
+
+        let cond = RuleCondition::Not(Box::new(RuleCondition::IsTrue("flag".to_string())));
+        assert!(cond.evaluate(&db));
+
+        db.set("flag", true);
+        assert!(!cond.evaluate(&db));
+    }
+
+    #[test]
+    fn test_rule_condition_always() {
+        let db = FactDatabase::new();
+        assert!(RuleCondition::Always.evaluate(&db));
+    }
+
+    #[test]
+    fn test_fact_modification_set() {
+        let mut db = LayeredFactDatabase::new();
+        let mod_set = FactModification::Set("key".to_string(), FactValue::Int(42));
+        mod_set.apply(&mut db);
+        assert_eq!(db.get_int("key"), Some(42));
+    }
+
+    #[test]
+    fn test_fact_modification_increment() {
+        let mut db = LayeredFactDatabase::new();
+        db.set("counter", 10i64);
+        let mod_inc = FactModification::Increment("counter".to_string(), 5);
+        mod_inc.apply(&mut db);
+        assert_eq!(db.get_int("counter"), Some(15));
+    }
+
+    #[test]
+    fn test_fact_modification_remove() {
+        let mut db = LayeredFactDatabase::new();
+        db.set("to_remove", 100i64);
+        assert!(db.contains("to_remove"));
+
+        let mod_remove = FactModification::Remove("to_remove".to_string());
+        mod_remove.apply(&mut db);
+        assert!(!db.contains_local("to_remove"));
+    }
+
+    #[test]
+    fn test_fact_modification_toggle() {
+        let mut db = LayeredFactDatabase::new();
+        db.set("flag", false);
+
+        let mod_toggle = FactModification::Toggle("flag".to_string());
+        mod_toggle.apply(&mut db);
+        assert_eq!(db.get_bool("flag"), Some(true));
+
+        mod_toggle.apply(&mut db);
+        assert_eq!(db.get_bool("flag"), Some(false));
+    }
+
+    #[test]
+    fn test_fact_modification_toggle_missing_key() {
+        let mut db = LayeredFactDatabase::new();
+        // Toggle on missing key should default to false, then toggle to true
+        let mod_toggle = FactModification::Toggle("missing".to_string());
+        mod_toggle.apply(&mut db);
+        assert_eq!(db.get_bool("missing"), Some(true));
+    }
+
+    #[test]
+    fn test_rule_registry_basic() {
+        let mut registry = RuleRegistry::new();
+        assert!(registry.is_empty());
+        assert_eq!(registry.len(), 0);
+
+        let rule = Rule::builder("rule1", "event1").build();
+        registry.register(rule);
+
+        assert!(!registry.is_empty());
+        assert_eq!(registry.len(), 1);
+        assert!(registry.get("rule1").is_some());
+        assert!(registry.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_rule_registry_unregister() {
+        let mut registry = RuleRegistry::new();
+        let rule = Rule::builder("rule1", "event1").build();
+        registry.register(rule);
+
+        let unregistered = registry.unregister("rule1");
+        assert!(unregistered.is_some());
+        assert!(registry.is_empty());
+
+        // Unregister non-existent
+        let unregistered_none = registry.unregister("nonexistent");
+        assert!(unregistered_none.is_none());
+    }
+
+    #[test]
+    fn test_rule_registry_set_enabled() {
+        let mut registry = RuleRegistry::new();
+        let rule = Rule::builder("rule1", "event1").build();
+        registry.register(rule);
+
+        assert!(registry.get("rule1").unwrap().enabled);
+
+        registry.set_enabled("rule1", false);
+        assert!(!registry.get("rule1").unwrap().enabled);
+
+        registry.set_enabled("rule1", true);
+        assert!(registry.get("rule1").unwrap().enabled);
+    }
+
+    #[test]
+    fn test_rule_registry_get_matching_rules() {
+        let mut registry = RuleRegistry::new();
+
+        let rule1 = Rule::builder("rule1", "event_a").priority(10).build();
+        let rule2 = Rule::builder("rule2", "event_a").priority(5).build();
+        let rule3 = Rule::builder("rule3", "event_b").priority(20).build();
+
+        registry.register(rule1);
+        registry.register(rule2);
+        registry.register(rule3);
+
+        let event_a = FactEvent::new("event_a");
+        let matching = registry.get_matching_rules(&event_a);
+
+        // Should match rule1 and rule2, sorted by priority (higher first)
+        assert_eq!(matching.len(), 2);
+        assert_eq!(matching[0].id, "rule1"); // priority 10
+        assert_eq!(matching[1].id, "rule2"); // priority 5
+    }
+
+    #[test]
+    fn test_rule_registry_iter() {
+        let mut registry = RuleRegistry::new();
+        registry.register(Rule::builder("r1", "e1").build());
+        registry.register(Rule::builder("r2", "e2").build());
+        registry.register(Rule::builder("r3", "e3").build());
+
+        let count = registry.iter().count();
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn test_rule_builder_enabled_false() {
+        let rule = Rule::builder("disabled_rule", "event")
+            .enabled(false)
+            .build();
+
+        assert!(!rule.enabled);
+    }
+
+    #[test]
+    fn test_rule_matches_disabled() {
+        let mut registry = RuleRegistry::new();
+        let rule = Rule::builder("rule1", "event_a").enabled(false).build();
+        registry.register(rule);
+
+        let event_a = FactEvent::new("event_a");
+        let matching = registry.get_matching_rules(&event_a);
+
+        // Disabled rules should not match
+        assert!(matching.is_empty());
     }
 }
