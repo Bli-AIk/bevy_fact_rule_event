@@ -170,7 +170,7 @@ pub trait FactReader {
 /// Centralized database for storing facts (game state).
 ///
 /// 用于存储事实（游戏状态）的集中式数据库。
-#[derive(Resource, Default, Debug)]
+#[derive(Resource, Default, Debug, Clone)]
 pub struct FactDatabase {
     facts: HashMap<FactKey, FactValue>,
 }
