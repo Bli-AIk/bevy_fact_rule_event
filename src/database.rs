@@ -43,6 +43,9 @@ pub enum FactValue {
     /// List of strings - useful for inventories, tags, etc.
     /// 字符串列表 - 适用于物品栏、标签等。
     StringList(Vec<String>),
+    /// List of integers - useful for HP values, stats arrays, etc.
+    /// 整数列表 - 适用于 HP 值、属性数组等。
+    IntList(Vec<i64>),
 }
 
 impl FactValue {
@@ -92,6 +95,16 @@ impl FactValue {
     pub fn as_string_list(&self) -> Option<&[String]> {
         match self {
             FactValue::StringList(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    /// Get the value as an integer list, if it is one.
+    ///
+    /// 如果值是整数列表，则获取该值。
+    pub fn as_int_list(&self) -> Option<&[i64]> {
+        match self {
+            FactValue::IntList(v) => Some(v),
             _ => None,
         }
     }
@@ -148,6 +161,18 @@ impl From<Vec<String>> for FactValue {
 impl From<Vec<&str>> for FactValue {
     fn from(v: Vec<&str>) -> Self {
         FactValue::StringList(v.into_iter().map(|s| s.to_string()).collect())
+    }
+}
+
+impl From<Vec<i64>> for FactValue {
+    fn from(v: Vec<i64>) -> Self {
+        FactValue::IntList(v)
+    }
+}
+
+impl From<Vec<i32>> for FactValue {
+    fn from(v: Vec<i32>) -> Self {
+        FactValue::IntList(v.into_iter().map(|i| i as i64).collect())
     }
 }
 

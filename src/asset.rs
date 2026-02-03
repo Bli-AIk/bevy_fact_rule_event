@@ -32,6 +32,9 @@ pub enum FactValueDef {
     /// List of strings - useful for inventories, tags, etc.
     /// 字符串列表 - 适用于物品栏、标签等。
     StringList(Vec<String>),
+    /// List of integers - useful for HP values, stats arrays, etc.
+    /// 整数列表 - 适用于 HP 值、属性数组等。
+    IntList(Vec<i64>),
 }
 
 impl From<FactValueDef> for FactValue {
@@ -42,6 +45,7 @@ impl From<FactValueDef> for FactValue {
             FactValueDef::Bool(v) => FactValue::Bool(v),
             FactValueDef::String(v) => FactValue::String(v),
             FactValueDef::StringList(v) => FactValue::StringList(v),
+            FactValueDef::IntList(v) => FactValue::IntList(v),
         }
     }
 }
