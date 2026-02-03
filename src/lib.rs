@@ -40,8 +40,8 @@ mod rule;
 mod systems;
 
 pub use asset::{
-    ActionHandlerRegistry, FactModificationDef, FactValueDef, RuleActionDef, RuleConditionDef,
-    RuleDef, RuleSetAsset, RuleSetAssetLoader,
+    ActionEventKind, ActionHandlerRegistry, FactModificationDef, FactValueDef, LocalFactValue,
+    RuleActionDef, RuleConditionDef, RuleDef, RuleEventDef, RuleSetAsset, RuleSetAssetLoader,
 };
 pub use database::{FactDatabase, FactKey, FactReader, FactValue};
 pub use event::{FactEvent, FactEventId};

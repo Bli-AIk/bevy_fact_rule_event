@@ -231,10 +231,19 @@ pub struct Rule {
     /// 触发此规则的事件 ID。
     pub trigger: FactEventId,
 
-    /// Condition to check before executing.
+    /// Condition to check before executing (legacy, use condition_expressions for new rules).
     ///
-    /// 执行前要检查的条件。
+    /// 执行前要检查的条件（旧版，新规则使用 condition_expressions）。
     pub condition: RuleCondition,
+
+    /// Expression-based conditions (list of expression strings).
+    /// All expressions must evaluate to true for the rule to fire.
+    /// These are evaluated by the game engine's expression evaluator.
+    ///
+    /// 基于表达式的条件（表达式字符串列表）。
+    /// 所有表达式都必须评估为真才能触发规则。
+    /// 这些由游戏引擎的表达式评估器评估。
+    pub condition_expressions: Vec<String>,
 
     /// Actions to execute when triggered and condition is met.
     ///
@@ -292,6 +301,7 @@ pub struct RuleBuilder {
     id: String,
     trigger: FactEventId,
     condition: RuleCondition,
+    condition_expressions: Vec<String>,
     actions: Vec<RuleAction>,
     modifications: Vec<FactModification>,
     outputs: Vec<FactEventId>,
@@ -308,6 +318,7 @@ impl RuleBuilder {
             id: id.into(),
             trigger: trigger.into(),
             condition: RuleCondition::Always,
+            condition_expressions: Vec::new(),
             actions: Vec::new(),
             modifications: Vec::new(),
             outputs: Vec::new(),
@@ -321,6 +332,14 @@ impl RuleBuilder {
     /// 设置此规则的条件。
     pub fn condition(mut self, condition: RuleCondition) -> Self {
         self.condition = condition;
+        self
+    }
+
+    /// Add a condition expression to this rule.
+    ///
+    /// 向此规则添加条件表达式。
+    pub fn condition_expr(mut self, expr: impl Into<String>) -> Self {
+        self.condition_expressions.push(expr.into());
         self
     }
 
@@ -372,6 +391,7 @@ impl RuleBuilder {
             id: self.id,
             trigger: self.trigger,
             condition: self.condition,
+            condition_expressions: self.condition_expressions,
             actions: self.actions,
             modifications: self.modifications,
             outputs: self.outputs,
