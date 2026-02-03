@@ -40,6 +40,9 @@ pub enum FactValue {
     Float(f64),
     Bool(bool),
     String(String),
+    /// List of strings - useful for inventories, tags, etc.
+    /// 字符串列表 - 适用于物品栏、标签等。
+    StringList(Vec<String>),
 }
 
 impl FactValue {
@@ -79,6 +82,16 @@ impl FactValue {
     pub fn as_string(&self) -> Option<&str> {
         match self {
             FactValue::String(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    /// Get the value as a string list, if it is one.
+    ///
+    /// 如果值是字符串列表，则获取该值。
+    pub fn as_string_list(&self) -> Option<&[String]> {
+        match self {
+            FactValue::StringList(v) => Some(v),
             _ => None,
         }
     }
@@ -126,6 +139,18 @@ impl From<&str> for FactValue {
     }
 }
 
+impl From<Vec<String>> for FactValue {
+    fn from(v: Vec<String>) -> Self {
+        FactValue::StringList(v)
+    }
+}
+
+impl From<Vec<&str>> for FactValue {
+    fn from(v: Vec<&str>) -> Self {
+        FactValue::StringList(v.into_iter().map(|s| s.to_string()).collect())
+    }
+}
+
 /// Trait for read-only fact database access.
 /// Implemented by both `FactDatabase` and `LayeredFactDatabase`.
 ///
@@ -161,6 +186,11 @@ pub trait FactReader {
     /// Get a string fact value.
     fn get_string(&self, key: &str) -> Option<&str> {
         self.get_by_str(key).and_then(|v| v.as_string())
+    }
+
+    /// Get a string list fact value.
+    fn get_string_list(&self, key: &str) -> Option<&[String]> {
+        self.get_by_str(key).and_then(|v| v.as_string_list())
     }
 
     /// Check if a fact exists.

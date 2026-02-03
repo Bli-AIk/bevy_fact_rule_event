@@ -29,6 +29,9 @@ pub enum FactValueDef {
     Float(f64),
     Bool(bool),
     String(String),
+    /// List of strings - useful for inventories, tags, etc.
+    /// 字符串列表 - 适用于物品栏、标签等。
+    StringList(Vec<String>),
 }
 
 impl From<FactValueDef> for FactValue {
@@ -38,6 +41,7 @@ impl From<FactValueDef> for FactValue {
             FactValueDef::Float(v) => FactValue::Float(v),
             FactValueDef::Bool(v) => FactValue::Bool(v),
             FactValueDef::String(v) => FactValue::String(v),
+            FactValueDef::StringList(v) => FactValue::StringList(v),
         }
     }
 }
