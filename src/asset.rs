@@ -379,9 +379,20 @@ impl RuleDef {
     ///
     /// 转换为运行时 Rule（不含动作，动作需要游戏特定处理）。
     pub fn to_rule(&self) -> Rule {
-        // Generate ID if not provided
+        self.to_rule_with_index(0)
+    }
+
+    /// Convert to a runtime Rule with an index suffix for unique ID generation.
+    ///
+    /// 转换为运行时 Rule，使用索引后缀生成唯一 ID。
+    pub fn to_rule_with_index(&self, index: usize) -> Rule {
+        // Generate ID if not provided, with index suffix for uniqueness
         let id = if self.id.is_empty() {
-            format!("rule_{}", self.event.to_event_id().replace(':', "_"))
+            format!(
+                "rule_{}_{:03}",
+                self.event.to_event_id().replace(':', "_"),
+                index
+            )
         } else {
             self.id.clone()
         };
@@ -396,6 +407,21 @@ impl RuleDef {
             outputs: self.outputs.iter().map(FactEventId::new).collect(),
             enabled: self.enabled,
             priority: self.priority,
+        }
+    }
+
+    /// Generate a rule ID for a given index, matching the logic used in to_rule_with_index.
+    ///
+    /// 为给定索引生成规则 ID，与 to_rule_with_index 中使用的逻辑匹配。
+    pub fn generate_id(&self, index: usize) -> String {
+        if self.id.is_empty() {
+            format!(
+                "rule_{}_{:03}",
+                self.event.to_event_id().replace(':', "_"),
+                index
+            )
+        } else {
+            self.id.clone()
         }
     }
 }
@@ -430,8 +456,8 @@ impl RuleSetAsset {
     ///
     /// 将此资产中的所有规则注册到注册表。
     pub fn register_rules(&self, registry: &mut RuleRegistry) {
-        for rule_def in &self.rules {
-            let rule = rule_def.to_rule();
+        for (idx, rule_def) in self.rules.iter().enumerate() {
+            let rule = rule_def.to_rule_with_index(idx);
             info!("FRE: Registering rule '{}' from asset", rule.id);
             registry.register(rule);
         }
