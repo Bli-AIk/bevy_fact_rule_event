@@ -107,7 +107,7 @@ FRE 系统强制实施关注点的清晰分离：
        mut commands: Commands,
    ) {
        // 从文件加载规则
-       let rules_handle: Handle<RuleSetAsset> = asset_server.load("rules/game_rules.rule.ron");
+       let rules_handle: Handle<FreAsset> = asset_server.load("rules/game_rules.fre.ron");
        commands.spawn(rules_handle);
    }
    ```
@@ -134,19 +134,18 @@ FRE 系统强制实施关注点的清晰分离：
    }
    ```
 
-5. **创建规则文件**（`assets/rules/game_rules.rule.ron`）：
+5. **创建规则文件**（`assets/rules/game_rules.fre.ron`）：
 
    ```ron
    (
-       version: 1,
-       initial_facts: {
+       facts: {
            "player_health": Int(100),
            "score": Int(0),
        },
        rules: [
            (
                id: "damage_player",
-               trigger: "player_hit",
+               event: Event("player_hit"),
                condition: GreaterThan(key: "player_health", value: Int(0)),
                modifications: [
                    Decrement(key: "player_health", amount: 10),
@@ -155,7 +154,7 @@ FRE 系统强制实施关注点的清晰分离：
            ),
            (
                id: "game_over",
-               trigger: "health_changed",
+               event: Event("health_changed"),
                condition: LessEqual(key: "player_health", value: Int(0)),
                actions: ["GameOver"],
                outputs: ["game_ended"],

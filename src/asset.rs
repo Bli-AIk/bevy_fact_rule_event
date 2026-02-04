@@ -599,12 +599,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_rule_def_serialization_legacy() {
-        // Test legacy format with `trigger` alias - must use Event wrapper
-        let rule_set = r#"
+    fn test_fre_asset_with_facts() {
+        // Test FRE format with facts field
+        let fre_data = r#"
 (
-    version: 1,
-    initial_facts: {
+    facts: {
         "counter": Int(0),
         "enabled": Bool(true),
     },
@@ -624,8 +623,8 @@ mod tests {
 )
 "#;
 
-        let asset: RuleSetAsset = ron::from_str(rule_set).unwrap();
-        assert_eq!(asset.version, 1);
+        let asset: FreAsset = ron::from_str(fre_data).unwrap();
+        assert_eq!(asset.facts.len(), 2);
         assert_eq!(asset.rules.len(), 1);
         assert_eq!(asset.rules[0].id, "test_rule");
         assert_eq!(asset.rules[0].event.to_event_id(), "test_event");
@@ -633,11 +632,10 @@ mod tests {
     }
 
     #[test]
-    fn test_rule_def_serialization_new_format() {
-        // Test new format with ActionEvent
-        let rule_set = r#"
+    fn test_fre_asset_action_event_format() {
+        // Test FRE format with ActionEvent
+        let fre_data = r#"
 (
-    version: 1,
     rules: [
         (
             event: ActionEvent(action: "Up", kind: JustPressed),
@@ -659,7 +657,7 @@ mod tests {
 )
 "#;
 
-        let asset: RuleSetAsset = ron::from_str(rule_set).unwrap();
+        let asset: FreAsset = ron::from_str(fre_data).unwrap();
         assert_eq!(asset.rules.len(), 2);
 
         // First rule: ActionEvent Up
@@ -675,9 +673,9 @@ mod tests {
     }
 
     #[test]
-    fn test_rule_def_serialization_string_event() {
-        // Test new format with string Event
-        let rule_set = r#"
+    fn test_fre_asset_string_event() {
+        // Test FRE format with string Event
+        let fre_data = r#"
 (
     rules: [
         (
@@ -690,7 +688,7 @@ mod tests {
 )
 "#;
 
-        let asset: RuleSetAsset = ron::from_str(rule_set).unwrap();
+        let asset: FreAsset = ron::from_str(fre_data).unwrap();
         assert_eq!(asset.rules.len(), 1);
         assert_eq!(asset.rules[0].event.to_event_id(), "custom_event");
     }
@@ -711,7 +709,7 @@ mod tests {
 
     #[test]
     fn test_local_fact_value_variants() {
-        let rule_set = r#"
+        let fre_data = r#"
 (
     rules: [
         (
@@ -728,7 +726,7 @@ mod tests {
 )
 "#;
 
-        let asset: RuleSetAsset = ron::from_str(rule_set).unwrap();
+        let asset: FreAsset = ron::from_str(fre_data).unwrap();
         assert_eq!(asset.rules[0].actions.len(), 5);
     }
 }

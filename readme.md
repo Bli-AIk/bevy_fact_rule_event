@@ -107,7 +107,7 @@ The FRE system enforces clean separation of concerns:
        mut commands: Commands,
    ) {
        // Load rules from file
-       let rules_handle: Handle<RuleSetAsset> = asset_server.load("rules/game_rules.rule.ron");
+       let rules_handle: Handle<FreAsset> = asset_server.load("rules/game_rules.fre.ron");
        commands.spawn(rules_handle);
    }
    ```
@@ -134,19 +134,18 @@ The FRE system enforces clean separation of concerns:
    }
    ```
 
-5. **Create a rule file** (`assets/rules/game_rules.rule.ron`):
+5. **Create a rule file** (`assets/rules/game_rules.fre.ron`):
 
    ```ron
    (
-       version: 1,
-       initial_facts: {
+       facts: {
            "player_health": Int(100),
            "score": Int(0),
        },
        rules: [
            (
                id: "damage_player",
-               trigger: "player_hit",
+               event: Event("player_hit"),
                condition: GreaterThan(key: "player_health", value: Int(0)),
                modifications: [
                    Decrement(key: "player_health", amount: 10),
@@ -155,7 +154,7 @@ The FRE system enforces clean separation of concerns:
            ),
            (
                id: "game_over",
-               trigger: "health_changed",
+               event: Event("health_changed"),
                condition: LessEqual(key: "player_health", value: Int(0)),
                actions: ["GameOver"],
                outputs: ["game_ended"],
