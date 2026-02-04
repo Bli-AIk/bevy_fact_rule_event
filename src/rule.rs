@@ -10,8 +10,42 @@ use crate::database::{FactReader, FactValue};
 use crate::event::{FactEvent, FactEventId};
 use crate::layered::LayeredFactDatabase;
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
+
+/// Rule scope - determines the lifetime and isolation of rules.
+///
+/// 规则作用域 - 决定规则的生命周期和隔离性。
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Deserialize, serde::Serialize,
+)]
+pub enum RuleScope {
+    /// Global rules - persist for the entire application lifetime.
+    /// Examples: pause menu, debug commands, achievement triggers.
+    ///
+    /// 全局规则 - 在整个应用生命周期内持续存在。
+    /// 示例：暂停菜单、调试命令、成就触发。
+    Global,
+
+    /// Local rules - scoped to the current scene/state.
+    /// Automatically cleared when exiting the scene.
+    /// Examples: room-specific interactions, battle rules.
+    ///
+    /// 局部规则 - 限定于当前场景/状态。
+    /// 退出场景时自动清除。
+    /// 示例：房间特定交互、战斗规则。
+    #[default]
+    Local,
+
+    /// View rules - scoped to a specific View entity.
+    /// Automatically cleared when the View is despawned.
+    /// Examples: UI navigation within a specific view.
+    ///
+    /// 视图规则 - 限定于特定 View 实体。
+    /// View 被销毁时自动清除。
+    /// 示例：特定视图内的 UI 导航。
+    View,
+}
 
 /// Condition predicate for checking facts.
 ///
@@ -226,6 +260,11 @@ pub struct Rule {
     /// 此规则的唯一标识符。
     pub id: String,
 
+    /// Scope of this rule (Global/Local/View).
+    ///
+    /// 此规则的作用域（Global/Local/View）。
+    pub scope: RuleScope,
+
     /// Event ID that triggers this rule.
     ///
     /// 触发此规则的事件 ID。
@@ -265,10 +304,19 @@ pub struct Rule {
     /// 此规则是否启用。
     pub enabled: bool,
 
-    /// Priority for rule ordering (higher = first).
+    /// Priority for rule ordering (higher = first, rules are grouped by priority).
     ///
-    /// 规则排序的优先级（越高越先）。
+    /// 规则排序的优先级（越高越先，规则按优先级分组）。
     pub priority: i32,
+
+    /// Whether this rule consumes the event after execution.
+    /// If true (default), no other rules in lower priority groups will be checked.
+    /// If false, continue checking rules within the same priority group.
+    ///
+    /// 此规则执行后是否消费事件。
+    /// 如果为 true（默认），将不检查更低优先级组的规则。
+    /// 如果为 false，继续检查同一优先级组内的规则。
+    pub consume_event: bool,
 }
 
 impl Rule {
@@ -299,6 +347,7 @@ impl Rule {
 /// 用于构建规则的构建器。
 pub struct RuleBuilder {
     id: String,
+    scope: RuleScope,
     trigger: FactEventId,
     condition: RuleCondition,
     condition_expressions: Vec<String>,
@@ -307,6 +356,7 @@ pub struct RuleBuilder {
     outputs: Vec<FactEventId>,
     enabled: bool,
     priority: i32,
+    consume_event: bool,
 }
 
 impl RuleBuilder {
@@ -316,6 +366,7 @@ impl RuleBuilder {
     pub fn new(id: impl Into<String>, trigger: impl Into<FactEventId>) -> Self {
         Self {
             id: id.into(),
+            scope: RuleScope::default(),
             trigger: trigger.into(),
             condition: RuleCondition::Always,
             condition_expressions: Vec::new(),
@@ -324,7 +375,16 @@ impl RuleBuilder {
             outputs: Vec::new(),
             enabled: true,
             priority: 0,
+            consume_event: true,
         }
+    }
+
+    /// Set the scope for this rule.
+    ///
+    /// 设置此规则的作用域。
+    pub fn scope(mut self, scope: RuleScope) -> Self {
+        self.scope = scope;
+        self
     }
 
     /// Set the condition for this rule.
@@ -383,12 +443,21 @@ impl RuleBuilder {
         self
     }
 
+    /// Set whether this rule consumes the event.
+    ///
+    /// 设置此规则是否消费事件。
+    pub fn consume_event(mut self, consume: bool) -> Self {
+        self.consume_event = consume;
+        self
+    }
+
     /// Build the rule.
     ///
     /// 构建规则。
     pub fn build(self) -> Rule {
         Rule {
             id: self.id,
+            scope: self.scope,
             trigger: self.trigger,
             condition: self.condition,
             condition_expressions: self.condition_expressions,
@@ -397,6 +466,7 @@ impl RuleBuilder {
             outputs: self.outputs,
             enabled: self.enabled,
             priority: self.priority,
+            consume_event: self.consume_event,
         }
     }
 }
@@ -468,17 +538,58 @@ impl RuleRegistry {
         }
     }
 
+    /// Get all rules that match a given event, grouped by priority and sorted by condition count.
+    /// Returns groups from highest to lowest priority.
+    /// Within each group, rules are sorted by condition count (fewer conditions first).
+    ///
+    /// 获取匹配给定事件的所有规则，按优先级分组并按条件数量排序。
+    /// 返回从高到低优先级的组。
+    /// 在每个组内，规则按条件数量排序（条件少的在前）。
+    pub fn get_matching_rules_grouped(&self, event: &FactEvent) -> Vec<Vec<&Rule>> {
+        // Group matching rules by priority
+        let mut groups: BTreeMap<i32, Vec<&Rule>> = BTreeMap::new();
+
+        for rule in self.rules.values() {
+            if rule.matches_event(event) {
+                groups.entry(rule.priority).or_default().push(rule);
+            }
+        }
+
+        // Sort each group by condition count (fewer conditions first)
+        for group in groups.values_mut() {
+            group.sort_by_key(|r| r.condition_expressions.len());
+        }
+
+        // Return groups in descending priority order (high to low)
+        groups.into_iter().rev().map(|(_, rules)| rules).collect()
+    }
+
     /// Get all rules that match a given event, sorted by priority.
+    /// Deprecated: Use get_matching_rules_grouped for proper priority grouping.
     ///
     /// 获取匹配给定事件的所有规则，按优先级排序。
+    /// 已弃用：使用 get_matching_rules_grouped 进行正确的优先级分组。
     pub fn get_matching_rules(&mut self, event: &FactEvent) -> Vec<&Rule> {
         // Rebuild sorted list if dirty
         if self.dirty {
             self.sorted_rules = self.rules.keys().cloned().collect();
             self.sorted_rules.sort_by(|a, b| {
-                let pa = self.rules.get(a).map(|r| r.priority).unwrap_or(0);
-                let pb = self.rules.get(b).map(|r| r.priority).unwrap_or(0);
-                pb.cmp(&pa) // Higher priority first
+                let rule_a = self.rules.get(a);
+                let rule_b = self.rules.get(b);
+                match (rule_a, rule_b) {
+                    (Some(a), Some(b)) => {
+                        // First by priority (descending)
+                        let priority_cmp = b.priority.cmp(&a.priority);
+                        if priority_cmp != std::cmp::Ordering::Equal {
+                            return priority_cmp;
+                        }
+                        // Then by condition count (ascending)
+                        a.condition_expressions
+                            .len()
+                            .cmp(&b.condition_expressions.len())
+                    }
+                    _ => std::cmp::Ordering::Equal,
+                }
             });
             self.dirty = false;
         }
@@ -504,11 +615,208 @@ impl RuleRegistry {
         self.rules.is_empty()
     }
 
+    /// Clear all rules from the registry.
+    ///
+    /// 清除注册表中的所有规则。
+    pub fn clear(&mut self) {
+        self.rules.clear();
+        self.sorted_rules.clear();
+        self.dirty = false;
+    }
+
     /// Iterate over all rules in the registry.
     ///
     /// 迭代注册表中的所有规则。
     pub fn iter(&self) -> impl Iterator<Item = &Rule> {
         self.rules.values()
+    }
+}
+
+/// Layered rule registry that manages rules with different scopes.
+/// Rules are separated into Global, Local, and View layers with different lifecycles.
+///
+/// 分层规则注册表，管理不同作用域的规则。
+/// 规则按 Global、Local 和 View 层分离，具有不同的生命周期。
+#[derive(Resource, Default)]
+pub struct LayeredRuleRegistry {
+    /// Global rules - persist for the entire application lifetime.
+    ///
+    /// 全局规则 - 在整个应用生命周期内持续存在。
+    global: RuleRegistry,
+
+    /// Local rules - scoped to the current scene/state.
+    ///
+    /// 局部规则 - 限定于当前场景/状态。
+    local: RuleRegistry,
+
+    /// View rules - keyed by View entity, cleared when View is despawned.
+    ///
+    /// 视图规则 - 按 View 实体键控，View 销毁时清除。
+    view: HashMap<Entity, RuleRegistry>,
+}
+
+impl LayeredRuleRegistry {
+    /// Create a new empty layered rule registry.
+    ///
+    /// 创建新的空分层规则注册表。
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register a rule to the appropriate layer based on its scope.
+    /// Note: View-scoped rules must use `register_view_rule` instead.
+    ///
+    /// 根据作用域将规则注册到相应层。
+    /// 注意：View 作用域的规则必须使用 `register_view_rule`。
+    pub fn register(&mut self, rule: Rule) {
+        match rule.scope {
+            RuleScope::Global => self.global.register(rule),
+            RuleScope::Local => self.local.register(rule),
+            RuleScope::View => {
+                warn!(
+                    "View-scoped rule '{}' registered without view entity, using Local scope instead",
+                    rule.id
+                );
+                self.local.register(rule);
+            }
+        }
+    }
+
+    /// Register a rule to a specific View's registry.
+    ///
+    /// 将规则注册到特定 View 的注册表。
+    pub fn register_view_rule(&mut self, view_entity: Entity, rule: Rule) {
+        self.view.entry(view_entity).or_default().register(rule);
+    }
+
+    /// Clear all Local layer rules.
+    /// Called when exiting a scene/state.
+    ///
+    /// 清除所有 Local 层规则。
+    /// 在退出场景/状态时调用。
+    pub fn clear_local(&mut self) {
+        self.local.clear();
+        info!("LayeredRuleRegistry: Cleared local layer rules");
+    }
+
+    /// Clear rules for a specific View entity.
+    /// Called when a View is despawned.
+    ///
+    /// 清除特定 View 实体的规则。
+    /// 在 View 销毁时调用。
+    pub fn clear_view(&mut self, view_entity: Entity) {
+        if self.view.remove(&view_entity).is_some() {
+            info!(
+                "LayeredRuleRegistry: Cleared rules for view entity {:?}",
+                view_entity
+            );
+        }
+    }
+
+    /// Get all matching rules grouped by priority, from all layers.
+    /// Rules are grouped by priority (high to low), and within each group
+    /// sorted by condition count (fewer conditions first).
+    ///
+    /// 获取所有层中匹配的规则，按优先级分组。
+    /// 规则按优先级分组（高到低），每组内按条件数量排序（条件少的在前）。
+    pub fn get_matching_rules_grouped(&self, event: &FactEvent) -> Vec<Vec<&Rule>> {
+        let mut all_groups: BTreeMap<i32, Vec<&Rule>> = BTreeMap::new();
+
+        // Collect from all layers
+        for rule in self.global.iter() {
+            if rule.matches_event(event) {
+                all_groups.entry(rule.priority).or_default().push(rule);
+            }
+        }
+        for rule in self.local.iter() {
+            if rule.matches_event(event) {
+                all_groups.entry(rule.priority).or_default().push(rule);
+            }
+        }
+        for registry in self.view.values() {
+            for rule in registry.iter() {
+                if rule.matches_event(event) {
+                    all_groups.entry(rule.priority).or_default().push(rule);
+                }
+            }
+        }
+
+        // Sort each group by condition count (fewer first)
+        for group in all_groups.values_mut() {
+            group.sort_by_key(|r| r.condition_expressions.len());
+        }
+
+        // Return in descending priority order
+        all_groups
+            .into_iter()
+            .rev()
+            .map(|(_, rules)| rules)
+            .collect()
+    }
+
+    /// Get a flat list of all matching rules, sorted by priority then condition count.
+    ///
+    /// 获取所有匹配规则的扁平列表，按优先级和条件数量排序。
+    pub fn get_matching_rules(&self, event: &FactEvent) -> Vec<&Rule> {
+        self.get_matching_rules_grouped(event)
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+
+    /// Get total number of rules across all layers.
+    ///
+    /// 获取所有层中规则的总数。
+    pub fn len(&self) -> usize {
+        self.global.len() + self.local.len() + self.view.values().map(|r| r.len()).sum::<usize>()
+    }
+
+    /// Check if all layers are empty.
+    ///
+    /// 检查所有层是否为空。
+    pub fn is_empty(&self) -> bool {
+        self.global.is_empty() && self.local.is_empty() && self.view.values().all(|r| r.is_empty())
+    }
+
+    /// Get a reference to a rule by ID, searching all layers.
+    ///
+    /// 按 ID 获取规则的引用，搜索所有层。
+    pub fn get(&self, rule_id: &str) -> Option<&Rule> {
+        self.global
+            .get(rule_id)
+            .or_else(|| self.local.get(rule_id))
+            .or_else(|| self.view.values().find_map(|r| r.get(rule_id)))
+    }
+
+    /// Iterate over all rules in the Global layer.
+    ///
+    /// 迭代 Global 层中的所有规则。
+    pub fn global_iter(&self) -> impl Iterator<Item = &Rule> {
+        self.global.iter()
+    }
+
+    /// Iterate over all rules in the Local layer.
+    ///
+    /// 迭代 Local 层中的所有规则。
+    pub fn local_iter(&self) -> impl Iterator<Item = &Rule> {
+        self.local.iter()
+    }
+
+    /// Iterate over all View layers with their entity keys.
+    ///
+    /// 迭代所有 View 层及其实体键。
+    pub fn view_iter(&self) -> impl Iterator<Item = (Entity, &RuleRegistry)> {
+        self.view.iter().map(|(e, r)| (*e, r))
+    }
+
+    /// Iterate over all rules across all layers.
+    ///
+    /// 迭代所有层中的所有规则。
+    pub fn iter(&self) -> impl Iterator<Item = &Rule> {
+        self.global
+            .iter()
+            .chain(self.local.iter())
+            .chain(self.view.values().flat_map(|r| r.iter()))
     }
 }
 

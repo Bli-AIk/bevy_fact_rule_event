@@ -41,12 +41,15 @@ mod systems;
 pub use asset::{
     ActionEventKind, ActionHandlerRegistry, FactModificationDef, FactValueDef, FreAsset,
     FreAssetLoader, LocalFactValue, RuleActionDef, RuleConditionDef, RuleDef, RuleEventDef,
+    RuleScopeDef,
 };
 
 pub use database::{FactDatabase, FactKey, FactReader, FactValue};
 pub use event::{FactEvent, FactEventId};
 pub use layered::LayeredFactDatabase;
-pub use rule::{FactModification, Rule, RuleAction, RuleCondition, RuleRegistry};
+pub use rule::{
+    FactModification, LayeredRuleRegistry, Rule, RuleAction, RuleCondition, RuleRegistry, RuleScope,
+};
 
 use bevy::asset::AssetApp;
 use bevy::prelude::*;
@@ -59,7 +62,7 @@ pub struct FREPlugin;
 impl Plugin for FREPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LayeredFactDatabase>()
-            .init_resource::<RuleRegistry>()
+            .init_resource::<LayeredRuleRegistry>()
             .init_resource::<ActionHandlerRegistry>()
             .init_resource::<systems::PendingFactEvents>()
             .init_asset::<FreAsset>()

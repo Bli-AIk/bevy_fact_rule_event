@@ -8,7 +8,7 @@
 
 use crate::database::FactValue;
 use crate::event::FactEventId;
-use crate::rule::{FactModification, Rule, RuleCondition, RuleRegistry};
+use crate::rule::{FactModification, Rule, RuleCondition, RuleRegistry, RuleScope};
 use bevy::asset::io::Reader;
 use bevy::asset::{Asset, AssetLoader, LoadContext};
 use bevy::prelude::*;
@@ -372,6 +372,14 @@ pub struct RuleDef {
     /// Priority for rule ordering (higher = first, defaults to 0).
     #[serde(default)]
     pub priority: i32,
+
+    /// Whether executing this rule consumes the event (prevents other rules from matching).
+    /// Defaults to true.
+    ///
+    /// 执行此规则是否消费事件（阻止其他规则匹配）。
+    /// 默认为 true。
+    #[serde(default = "default_consume_event")]
+    pub consume_event: bool,
 }
 
 fn default_condition() -> RuleConditionDef {
@@ -382,18 +390,23 @@ fn default_enabled() -> bool {
     true
 }
 
+fn default_consume_event() -> bool {
+    true
+}
+
 impl RuleDef {
     /// Convert to a runtime Rule (without actions, which need game-specific handling).
     ///
     /// 转换为运行时 Rule（不含动作，动作需要游戏特定处理）。
     pub fn to_rule(&self) -> Rule {
-        self.to_rule_with_index(0)
+        self.to_rule_with_index(0, RuleScope::default())
     }
 
-    /// Convert to a runtime Rule with an index suffix for unique ID generation.
+    /// Convert to a runtime Rule with an index suffix for unique ID generation
+    /// and a scope inherited from the parent FreAsset.
     ///
-    /// 转换为运行时 Rule，使用索引后缀生成唯一 ID。
-    pub fn to_rule_with_index(&self, index: usize) -> Rule {
+    /// 转换为运行时 Rule，使用索引后缀生成唯一 ID 和从父 FreAsset 继承的作用域。
+    pub fn to_rule_with_index(&self, index: usize, scope: RuleScope) -> Rule {
         // Generate ID if not provided, with index suffix for uniqueness
         let id = if self.id.is_empty() {
             format!(
@@ -407,6 +420,7 @@ impl RuleDef {
 
         Rule {
             id,
+            scope,
             trigger: FactEventId::new(self.event.to_event_id()),
             condition: self.condition.clone().into(),
             condition_expressions: self.conditions.clone(),
@@ -415,6 +429,7 @@ impl RuleDef {
             outputs: self.outputs.iter().map(FactEventId::new).collect(),
             enabled: self.enabled,
             priority: self.priority,
+            consume_event: self.consume_event,
         }
     }
 
@@ -445,6 +460,14 @@ impl RuleDef {
 /// 这是统一的 FRE 数据资产格式 - 纯数据，无类型标识。
 #[derive(Asset, TypePath, Debug, Clone, Serialize, Deserialize)]
 pub struct FreAsset {
+    /// Scope for all rules in this asset.
+    /// Defaults to Local if not specified.
+    ///
+    /// 此资产中所有规则的作用域。
+    /// 如未指定，默认为 Local。
+    #[serde(default)]
+    pub scope: RuleScopeDef,
+
     /// Facts to set when this asset is loaded.
     /// 加载此资产时设置的事实。
     #[serde(default)]
@@ -456,14 +479,66 @@ pub struct FreAsset {
     pub rules: Vec<RuleDef>,
 }
 
+/// Serializable rule scope for RON files.
+///
+/// RON 文件的可序列化规则作用域。
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RuleScopeDef {
+    /// Global rules - persist for app lifetime.
+    Global,
+    /// Local rules - cleared on scene exit (default).
+    #[default]
+    Local,
+    /// View rules - cleared when View despawns.
+    View,
+}
+
+impl From<RuleScopeDef> for RuleScope {
+    fn from(def: RuleScopeDef) -> Self {
+        match def {
+            RuleScopeDef::Global => RuleScope::Global,
+            RuleScopeDef::Local => RuleScope::Local,
+            RuleScopeDef::View => RuleScope::View,
+        }
+    }
+}
+
 impl FreAsset {
-    /// Register all rules from this asset into the registry.
+    /// Get the scope for rules in this asset.
     ///
-    /// 将此资产中的所有规则注册到注册表。
+    /// 获取此资产中规则的作用域。
+    pub fn scope(&self) -> RuleScope {
+        self.scope.into()
+    }
+
+    /// Register all rules from this asset into a basic RuleRegistry.
+    ///
+    /// 将此资产中的所有规则注册到基础 RuleRegistry。
     pub fn register_rules(&self, registry: &mut RuleRegistry) {
+        let scope = self.scope();
         for (idx, rule_def) in self.rules.iter().enumerate() {
-            let rule = rule_def.to_rule_with_index(idx);
-            info!("FRE: Registering rule '{}' from asset", rule.id);
+            let rule = rule_def.to_rule_with_index(idx, scope);
+            info!(
+                "FRE: Registering rule '{}' from asset (scope: {:?})",
+                rule.id, scope
+            );
+            registry.register(rule);
+        }
+    }
+
+    /// Register all rules from this asset into a LayeredRuleRegistry.
+    /// Rules are automatically placed in the correct layer based on their scope.
+    ///
+    /// 将此资产中的所有规则注册到 LayeredRuleRegistry。
+    /// 规则会根据其作用域自动放置到正确的层。
+    pub fn register_rules_layered(&self, registry: &mut crate::rule::LayeredRuleRegistry) {
+        let scope = self.scope();
+        for (idx, rule_def) in self.rules.iter().enumerate() {
+            let rule = rule_def.to_rule_with_index(idx, scope);
+            info!(
+                "FRE: Registering rule '{}' from asset to layered registry (scope: {:?})",
+                rule.id, scope
+            );
             registry.register(rule);
         }
     }
