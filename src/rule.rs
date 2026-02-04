@@ -673,8 +673,14 @@ impl LayeredRuleRegistry {
             RuleScope::Global => self.global.register(rule),
             RuleScope::Local => self.local.register(rule),
             RuleScope::View => {
-                warn!(
-                    "View-scoped rule '{}' registered without view entity, using Local scope instead",
+                // View-scoped rules MUST be registered via register_view_rule() with an Entity.
+                // This is a programming error - using Local as fallback but logging as error.
+                // View 作用域规则必须通过 register_view_rule() 与 Entity 一起注册。
+                // 这是编程错误 - 使用 Local 作为回退但记录为错误。
+                error!(
+                    "BUG: View-scoped rule '{}' registered without view entity! \
+                    Use register_view_rule(entity, rule) instead. \
+                    Falling back to Local scope which may cause rule leakage across scenes.",
                     rule.id
                 );
                 self.local.register(rule);
