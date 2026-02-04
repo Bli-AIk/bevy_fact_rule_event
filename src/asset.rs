@@ -349,7 +349,7 @@ pub struct RuleDef {
     #[serde(default)]
     pub conditions: Vec<String>,
 
-    /// Legacy condition field (for backward compatibility, prefer `conditions`).
+    /// Internal condition field (used for Always/Custom matching).
     #[serde(default = "default_condition")]
     pub condition: RuleConditionDef,
 

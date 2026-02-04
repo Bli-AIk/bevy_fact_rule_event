@@ -231,9 +231,9 @@ pub struct Rule {
     /// 触发此规则的事件 ID。
     pub trigger: FactEventId,
 
-    /// Condition to check before executing (legacy, use condition_expressions for new rules).
+    /// Condition to check before executing (Always/Custom matching).
     ///
-    /// 执行前要检查的条件（旧版，新规则使用 condition_expressions）。
+    /// 执行前要检查的条件（Always/Custom 匹配）。
     pub condition: RuleCondition,
 
     /// Expression-based conditions (list of expression strings).
