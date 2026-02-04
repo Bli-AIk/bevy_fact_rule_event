@@ -14,8 +14,7 @@
 //! Rules can be defined in RON files and loaded as assets:
 //! ```ron
 //! (
-//!     version: 1,
-//!     initial_facts: {
+//!     facts: {
 //!         "counter": Int(0),
 //!     },
 //!     rules: [
@@ -40,9 +39,10 @@ mod rule;
 mod systems;
 
 pub use asset::{
-    ActionEventKind, ActionHandlerRegistry, FactModificationDef, FactValueDef, LocalFactValue,
-    RuleActionDef, RuleConditionDef, RuleDef, RuleEventDef, RuleSetAsset, RuleSetAssetLoader,
+    ActionEventKind, ActionHandlerRegistry, FactModificationDef, FactValueDef, FreAsset,
+    FreAssetLoader, LocalFactValue, RuleActionDef, RuleConditionDef, RuleDef, RuleEventDef,
 };
+
 pub use database::{FactDatabase, FactKey, FactReader, FactValue};
 pub use event::{FactEvent, FactEventId};
 pub use layered::LayeredFactDatabase;
@@ -62,8 +62,8 @@ impl Plugin for FREPlugin {
             .init_resource::<RuleRegistry>()
             .init_resource::<ActionHandlerRegistry>()
             .init_resource::<systems::PendingFactEvents>()
-            .init_asset::<RuleSetAsset>()
-            .register_asset_loader(RuleSetAssetLoader)
+            .init_asset::<FreAsset>()
+            .register_asset_loader(FreAssetLoader)
             .add_message::<FactEvent>()
             .add_systems(
                 Update,

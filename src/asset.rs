@@ -438,28 +438,25 @@ impl RuleDef {
 // Rule Set Asset
 // ============================================================================
 
-/// A collection of rules that can be loaded from a RON file.
+/// A collection of facts and rules that can be loaded from a RON file.
+/// This is the unified FRE data asset format - pure data with no type identifier.
 ///
-/// 可从 RON 文件加载的规则集合。
+/// 可从 RON 文件加载的事实和规则集合。
+/// 这是统一的 FRE 数据资产格式 - 纯数据，无类型标识。
 #[derive(Asset, TypePath, Debug, Clone, Serialize, Deserialize)]
-pub struct RuleSetAsset {
-    /// Version number for format compatibility.
-    #[serde(default = "default_version")]
-    pub version: u32,
-
-    /// Initial facts to set when this rule set is loaded.
+pub struct FreAsset {
+    /// Facts to set when this asset is loaded.
+    /// 加载此资产时设置的事实。
     #[serde(default)]
-    pub initial_facts: HashMap<String, FactValueDef>,
+    pub facts: HashMap<String, FactValueDef>,
 
     /// The rules defined in this set.
+    /// 此集合中定义的规则。
+    #[serde(default)]
     pub rules: Vec<RuleDef>,
 }
 
-fn default_version() -> u32 {
-    1
-}
-
-impl RuleSetAsset {
+impl FreAsset {
     /// Register all rules from this asset into the registry.
     ///
     /// 将此资产中的所有规则注册到注册表。
@@ -471,11 +468,11 @@ impl RuleSetAsset {
         }
     }
 
-    /// Get the initial facts defined in this asset.
+    /// Get the facts defined in this asset.
     ///
-    /// 获取此资产中定义的初始事实。
-    pub fn get_initial_facts(&self) -> &HashMap<String, FactValueDef> {
-        &self.initial_facts
+    /// 获取此资产中定义的事实。
+    pub fn get_facts(&self) -> &HashMap<String, FactValueDef> {
+        &self.facts
     }
 
     /// Get the rule definitions for custom action handling.
@@ -490,14 +487,14 @@ impl RuleSetAsset {
 // Asset Loader
 // ============================================================================
 
-/// Asset loader for .rules.ron files.
+/// Asset loader for .fre.ron files.
 ///
-/// .rules.ron 文件的资产加载器。
+/// .fre.ron 文件的资产加载器。
 #[derive(Default)]
-pub struct RuleSetAssetLoader;
+pub struct FreAssetLoader;
 
-impl AssetLoader for RuleSetAssetLoader {
-    type Asset = RuleSetAsset;
+impl AssetLoader for FreAssetLoader {
+    type Asset = FreAsset;
     type Settings = ();
     type Error = anyhow::Error;
 
@@ -510,13 +507,13 @@ impl AssetLoader for RuleSetAssetLoader {
         Box::pin(async move {
             let mut bytes = Vec::new();
             reader.read_to_end(&mut bytes).await?;
-            let asset = ron::de::from_bytes::<RuleSetAsset>(&bytes)?;
+            let asset = ron::de::from_bytes::<FreAsset>(&bytes)?;
             Ok(asset)
         })
     }
 
     fn extensions(&self) -> &[&str] {
-        &["rules.ron"]
+        &["fre.ron"]
     }
 }
 

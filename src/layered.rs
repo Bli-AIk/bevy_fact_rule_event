@@ -330,6 +330,20 @@ impl LayeredFactDatabase {
         self.global.len()
     }
 
+    /// Iterate over facts in the local layer.
+    ///
+    /// 迭代局部层中的事实。
+    pub fn iter_local(&self) -> impl Iterator<Item = (&FactKey, &FactValue)> {
+        self.local.iter()
+    }
+
+    /// Iterate over facts in the global layer.
+    ///
+    /// 迭代全局层中的事实。
+    pub fn iter_global(&self) -> impl Iterator<Item = (&FactKey, &FactValue)> {
+        self.global.iter()
+    }
+
     /// Check if both layers are empty.
     ///
     /// 检查两层是否都为空。
