@@ -565,7 +565,7 @@ impl FreAsset {
 /// Asset loader for .fre.ron files.
 ///
 /// .fre.ron 文件的资产加载器。
-#[derive(Default)]
+#[derive(Default, bevy::reflect::TypePath)]
 pub struct FreAssetLoader;
 
 impl AssetLoader for FreAssetLoader {
