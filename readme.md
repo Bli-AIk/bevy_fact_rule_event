@@ -50,6 +50,13 @@ The FRE system enforces clean separation of concerns:
 * (Planned) Visual Rule Editor
 * (Planned) Hot-Reloading Support
 
+## Bevy Version Support
+
+| `bevy` | `bevy_fact_rule_event` |
+|--------|------------------------|
+| 0.18   | 0.3.0                  |
+| 0.17   | < 0.3.0                |
+
 ## Architecture Overview
 
 ```
@@ -85,7 +92,7 @@ The FRE system enforces clean separation of concerns:
 
    ```toml
    [dependencies]
-   bevy_fact_rule_event = "0.1.0"
+   bevy_fact_rule_event = "0.3.0"
    ```
 
 3. **Basic usage**:
@@ -180,7 +187,7 @@ This project uses the following crates:
 
 | Crate                                             | Version | Description                 |
 | ------------------------------------------------- | ------- | --------------------------- |
-| [bevy](https://crates.io/crates/bevy) | 0.17.2   | Game engine |
+| [bevy](https://crates.io/crates/bevy) | 0.18   | Game engine |
 | [serde](https://crates.io/crates/serde) | 1.0   | Serialization framework |
 
 ## Contributing
