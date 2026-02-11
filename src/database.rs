@@ -46,6 +46,12 @@ pub enum FactValue {
     /// List of integers - useful for HP values, stats arrays, etc.
     /// 整数列表 - 适用于 HP 值、属性数组等。
     IntList(Vec<i64>),
+    /// List of floats - useful for coordinates, multipliers, etc.
+    /// 浮点数列表 - 适用于坐标、乘数等。
+    FloatList(Vec<f64>),
+    /// List of booleans - useful for flags, toggles, etc.
+    /// 布尔列表 - 适用于标志、开关等。
+    BoolList(Vec<bool>),
 }
 
 impl FactValue {
@@ -105,6 +111,26 @@ impl FactValue {
     pub fn as_int_list(&self) -> Option<&[i64]> {
         match self {
             FactValue::IntList(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    /// Get the value as a float list, if it is one.
+    ///
+    /// 如果值是浮点数列表，则获取该值。
+    pub fn as_float_list(&self) -> Option<&[f64]> {
+        match self {
+            FactValue::FloatList(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    /// Get the value as a boolean list, if it is one.
+    ///
+    /// 如果值是布尔列表，则获取该值。
+    pub fn as_bool_list(&self) -> Option<&[bool]> {
+        match self {
+            FactValue::BoolList(v) => Some(v),
             _ => None,
         }
     }
@@ -176,6 +202,24 @@ impl From<Vec<i32>> for FactValue {
     }
 }
 
+impl From<Vec<f64>> for FactValue {
+    fn from(v: Vec<f64>) -> Self {
+        FactValue::FloatList(v)
+    }
+}
+
+impl From<Vec<f32>> for FactValue {
+    fn from(v: Vec<f32>) -> Self {
+        FactValue::FloatList(v.into_iter().map(|f| f as f64).collect())
+    }
+}
+
+impl From<Vec<bool>> for FactValue {
+    fn from(v: Vec<bool>) -> Self {
+        FactValue::BoolList(v)
+    }
+}
+
 /// Trait for read-only fact database access.
 /// Implemented by both `FactDatabase` and `LayeredFactDatabase`.
 ///
@@ -216,6 +260,21 @@ pub trait FactReader {
     /// Get a string list fact value.
     fn get_string_list(&self, key: &str) -> Option<&[String]> {
         self.get_by_str(key).and_then(|v| v.as_string_list())
+    }
+
+    /// Get an integer list fact value.
+    fn get_int_list(&self, key: &str) -> Option<&[i64]> {
+        self.get_by_str(key).and_then(|v| v.as_int_list())
+    }
+
+    /// Get a float list fact value.
+    fn get_float_list(&self, key: &str) -> Option<&[f64]> {
+        self.get_by_str(key).and_then(|v| v.as_float_list())
+    }
+
+    /// Get a boolean list fact value.
+    fn get_bool_list(&self, key: &str) -> Option<&[bool]> {
+        self.get_by_str(key).and_then(|v| v.as_bool_list())
     }
 
     /// Check if a fact exists.
