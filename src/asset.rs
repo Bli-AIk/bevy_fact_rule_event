@@ -218,6 +218,11 @@ impl RuleEventDef {
     /// Convert to a string event ID for matching.
     ///
     /// 转换为字符串事件 ID 用于匹配。
+    ///
+    /// Note: Action names are converted to lowercase to match the event format
+    /// emitted by the FRE bridge.
+    ///
+    /// 注意：动作名被转换为小写以匹配 FRE 桥接发出的事件格式。
     pub fn to_event_id(&self) -> String {
         match self {
             RuleEventDef::Event(id) => id.clone(),
@@ -227,7 +232,9 @@ impl RuleEventDef {
                     ActionEventKind::Pressed => "pressed",
                     ActionEventKind::JustReleased => "just_released",
                 };
-                format!("action:{}:{}", action, kind_str)
+                // Convert action name to lowercase to match fre_bridge event format
+                // 将动作名转换为小写以匹配 fre_bridge 的事件格式
+                format!("action:{}:{}", action.to_lowercase(), kind_str)
             }
         }
     }
@@ -735,14 +742,14 @@ mod tests {
         let asset: FreAsset = ron::from_str(fre_data).unwrap();
         assert_eq!(asset.rules.len(), 2);
 
-        // First rule: ActionEvent Up
-        assert_eq!(asset.rules[0].event.to_event_id(), "action:Up:just_pressed");
+        // First rule: ActionEvent Up (lowercase)
+        assert_eq!(asset.rules[0].event.to_event_id(), "action:up:just_pressed");
         assert_eq!(asset.rules[0].conditions, vec!["$selection > 0"]);
 
-        // Second rule: ActionEvent Confirm
+        // Second rule: ActionEvent Confirm (lowercase)
         assert_eq!(
             asset.rules[1].event.to_event_id(),
-            "action:Confirm:just_pressed"
+            "action:confirm:just_pressed"
         );
         assert_eq!(asset.rules[1].conditions, vec!["$depth == 0"]);
     }
