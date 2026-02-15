@@ -635,7 +635,7 @@ mod tests {
             conditions: ["$depth == 0"],
             actions: [
                 SetLocalFact("depth", Int(1)),
-                PlaySoundFullPath("audios/sfx/confirm.wav"),
+                PlaySoundFullPath("assets/audios/sfx/confirm.wav"),
             ],
         ),
     ],
