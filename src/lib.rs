@@ -47,7 +47,7 @@ pub use database::{FactDatabase, FactKey, FactReader, FactValue};
 pub use event::{FactEvent, FactEventId};
 pub use layered::LayeredFactDatabase;
 pub use rule::{FactModification, LayeredRuleRegistry, Rule, RuleRegistry, RuleScope};
-pub use systems::PendingFactEvents;
+pub use systems::{ConditionEvaluator, ConditionEvaluatorTrait, PendingFactEvents};
 
 use bevy::asset::AssetApp;
 use bevy::prelude::*;
@@ -63,6 +63,7 @@ impl Plugin for FREPlugin {
             .init_resource::<LayeredRuleRegistry>()
             .init_resource::<ActionHandlerRegistry>()
             .init_resource::<systems::PendingFactEvents>()
+            .init_resource::<systems::ConditionEvaluator>()
             .init_asset::<FreAsset>()
             .register_asset_loader(FreAssetLoader)
             .add_message::<FactEvent>()

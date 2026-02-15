@@ -6,8 +6,9 @@
 
 use crate::event::FactEvent;
 use crate::layered::LayeredFactDatabase;
-use crate::rule::LayeredRuleRegistry;
+use crate::rule::{LayeredRuleRegistry, Rule};
 use bevy::prelude::*;
+use std::sync::Arc;
 
 /// Resource to queue output events between systems.
 ///
@@ -15,6 +16,73 @@ use bevy::prelude::*;
 #[derive(Resource, Default)]
 pub struct PendingFactEvents {
     pub events: Vec<FactEvent>,
+}
+
+/// Trait for evaluating rule condition expressions.
+/// Implement this to provide custom condition evaluation logic.
+///
+/// 用于评估规则条件表达式的 trait。
+/// 实现此 trait 以提供自定义条件评估逻辑。
+pub trait ConditionEvaluatorTrait: Send + Sync + 'static {
+    /// Evaluate all condition expressions for a rule.
+    /// Returns true if all conditions pass or if there are no conditions.
+    ///
+    /// 评估规则的所有条件表达式。
+    /// 如果所有条件都通过或没有条件，返回 true。
+    fn evaluate(&self, conditions: &[String], facts: &LayeredFactDatabase) -> bool;
+}
+
+/// Default condition evaluator that always returns true (matches "Always" behavior).
+///
+/// 默认条件评估器，始终返回 true（匹配 "Always" 行为）。
+#[derive(Default)]
+pub struct DefaultConditionEvaluator;
+
+impl ConditionEvaluatorTrait for DefaultConditionEvaluator {
+    fn evaluate(&self, _conditions: &[String], _facts: &LayeredFactDatabase) -> bool {
+        // Default: if no conditions, return true; otherwise also return true (no evaluation)
+        // This maintains backward compatibility - rules without conditions always match
+        true
+    }
+}
+
+/// Resource that holds the condition evaluator function.
+/// Games should replace this with their own evaluator that understands their expression syntax.
+///
+/// 持有条件评估器函数的资源。
+/// 游戏应该用自己的评估器替换它，以理解其表达式语法。
+#[derive(Resource)]
+pub struct ConditionEvaluator {
+    evaluator: Arc<dyn ConditionEvaluatorTrait>,
+}
+
+impl Default for ConditionEvaluator {
+    fn default() -> Self {
+        Self {
+            evaluator: Arc::new(DefaultConditionEvaluator),
+        }
+    }
+}
+
+impl ConditionEvaluator {
+    /// Create a new condition evaluator with a custom implementation.
+    ///
+    /// 使用自定义实现创建新的条件评估器。
+    pub fn new<T: ConditionEvaluatorTrait>(evaluator: T) -> Self {
+        Self {
+            evaluator: Arc::new(evaluator),
+        }
+    }
+
+    /// Evaluate conditions for a rule.
+    ///
+    /// 评估规则的条件。
+    pub fn evaluate(&self, rule: &Rule, facts: &LayeredFactDatabase) -> bool {
+        if rule.condition_expressions.is_empty() {
+            return true; // No conditions = always match
+        }
+        self.evaluator.evaluate(&rule.condition_expressions, facts)
+    }
 }
 
 /// Main system for processing the FRE loop using LayeredFactDatabase and LayeredRuleRegistry:
@@ -41,6 +109,7 @@ pub fn process_rules_system(
     mut layered_db: ResMut<LayeredFactDatabase>,
     registry: Res<LayeredRuleRegistry>,
     mut pending_events: ResMut<PendingFactEvents>,
+    condition_evaluator: Res<ConditionEvaluator>,
 ) {
     // Collect events to process
     let events_to_process: Vec<FactEvent> = events.read().cloned().collect();
@@ -51,9 +120,11 @@ pub fn process_rules_system(
 
         'outer: for group in rule_groups {
             for rule in group {
-                // Note: condition_expressions are evaluated by the game engine's expression evaluator,
-                // not here. This base system only handles rule matching by event and priority.
-                // Game code (e.g., fre_bridge.rs) should override or extend this behavior.
+                // Evaluate condition expressions using the provided evaluator
+                if !condition_evaluator.evaluate(rule, &layered_db) {
+                    trace!("FRE: Rule '{}' skipped - conditions not met", rule.id);
+                    continue;
+                }
 
                 info!(
                     "FRE: Rule '{}' triggered by event '{}' (priority: {}, conditions: {})",
