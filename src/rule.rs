@@ -1,17 +1,16 @@
 //! # rule.rs
 //!
 //! Rule definitions - the logic layer of FRE.
-//! Rules contain triggers, conditions, actions, modifications, and outputs.
+//! Rules contain triggers, conditions (expressions), modifications, and outputs.
 //!
 //! 规则定义 - FRE 的逻辑层。
-//! 规则包含触发器、条件、动作、修改和输出。
+//! 规则包含触发器、条件（表达式）、修改和输出。
 
-use crate::database::{FactReader, FactValue};
+use crate::database::FactValue;
 use crate::event::{FactEvent, FactEventId};
 use crate::layered::LayeredFactDatabase;
 use bevy::prelude::*;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 
 /// Rule scope - determines the lifetime and isolation of rules.
 ///
@@ -45,120 +44,6 @@ pub enum RuleScope {
     /// View 被销毁时自动清除。
     /// 示例：特定视图内的 UI 导航。
     View,
-}
-
-/// Condition predicate for checking facts.
-///
-/// 用于检查事实的条件谓词。
-#[derive(Clone, Debug)]
-pub enum RuleCondition {
-    /// Check if a fact equals a specific value.
-    ///
-    /// 检查事实是否等于特定值。
-    Equals(String, FactValue),
-
-    /// Check if an integer fact is greater than a value.
-    ///
-    /// 检查整数事实是否大于某个值。
-    GreaterThan(String, i64),
-
-    /// Check if an integer fact is less than a value.
-    ///
-    /// 检查整数事实是否小于某个值。
-    LessThan(String, i64),
-
-    /// Check if an integer fact is greater than or equal to a value.
-    ///
-    /// 检查整数事实是否大于或等于某个值。
-    GreaterOrEqual(String, i64),
-
-    /// Check if an integer fact is less than or equal to a value.
-    ///
-    /// 检查整数事实是否小于或等于某个值。
-    LessOrEqual(String, i64),
-
-    /// Check if a fact exists.
-    ///
-    /// 检查事实是否存在。
-    Exists(String),
-
-    /// Check if a fact does not exist.
-    ///
-    /// 检查事实是否不存在。
-    NotExists(String),
-
-    /// Check if a boolean fact is true.
-    ///
-    /// 检查布尔事实是否为真。
-    IsTrue(String),
-
-    /// Check if a boolean fact is false.
-    ///
-    /// 检查布尔事实是否为假。
-    IsFalse(String),
-
-    /// Logical AND of multiple conditions.
-    ///
-    /// 多个条件的逻辑与。
-    And(Vec<RuleCondition>),
-
-    /// Logical OR of multiple conditions.
-    ///
-    /// 多个条件的逻辑或。
-    Or(Vec<RuleCondition>),
-
-    /// Logical NOT of a condition.
-    ///
-    /// 条件的逻辑非。
-    Not(Box<RuleCondition>),
-
-    /// Always true (no condition).
-    ///
-    /// 总是为真（无条件）。
-    Always,
-}
-
-impl RuleCondition {
-    /// Evaluate the condition against any fact reader (FactDatabase or LayeredFactDatabase).
-    ///
-    /// 根据任何事实读取器（FactDatabase 或 LayeredFactDatabase）评估条件。
-    pub fn evaluate(&self, db: &impl FactReader) -> bool {
-        match self {
-            RuleCondition::Equals(key, value) => db.get_by_str(key) == Some(value),
-
-            RuleCondition::GreaterThan(key, threshold) => {
-                db.get_int(key).is_some_and(|v| v > *threshold)
-            }
-
-            RuleCondition::LessThan(key, threshold) => {
-                db.get_int(key).is_some_and(|v| v < *threshold)
-            }
-
-            RuleCondition::GreaterOrEqual(key, threshold) => {
-                db.get_int(key).is_some_and(|v| v >= *threshold)
-            }
-
-            RuleCondition::LessOrEqual(key, threshold) => {
-                db.get_int(key).is_some_and(|v| v <= *threshold)
-            }
-
-            RuleCondition::Exists(key) => db.contains(key),
-
-            RuleCondition::NotExists(key) => !db.contains(key),
-
-            RuleCondition::IsTrue(key) => db.get_bool(key) == Some(true),
-
-            RuleCondition::IsFalse(key) => db.get_bool(key) == Some(false),
-
-            RuleCondition::And(conditions) => conditions.iter().all(|c| c.evaluate(db)),
-
-            RuleCondition::Or(conditions) => conditions.iter().any(|c| c.evaluate(db)),
-
-            RuleCondition::Not(condition) => !condition.evaluate(db),
-
-            RuleCondition::Always => true,
-        }
-    }
 }
 
 /// Modification to apply to the fact database.
@@ -210,49 +95,9 @@ impl FactModification {
     }
 }
 
-/// Action to execute when a rule is triggered.
-/// Actions are callbacks that can modify game state.
+/// A rule definition containing trigger, conditions (expressions), modifications, and outputs.
 ///
-/// 规则触发时执行的动作。
-/// 动作是可以修改游戏状态的回调。
-pub type RuleActionFn =
-    Arc<dyn Fn(&FactEvent, &LayeredFactDatabase, &mut bevy::ecs::system::Commands) + Send + Sync>;
-
-/// Wrapper for rule actions.
-///
-/// 规则动作的包装器。
-#[derive(Clone)]
-pub struct RuleAction {
-    pub action: RuleActionFn,
-}
-
-impl RuleAction {
-    /// Create a new action from a closure.
-    ///
-    /// 从闭包创建新动作。
-    pub fn new<F>(f: F) -> Self
-    where
-        F: Fn(&FactEvent, &LayeredFactDatabase, &mut bevy::ecs::system::Commands)
-            + Send
-            + Sync
-            + 'static,
-    {
-        Self {
-            action: Arc::new(f),
-        }
-    }
-
-    /// Execute the action.
-    ///
-    /// 执行动作。
-    pub fn execute(&self, event: &FactEvent, db: &LayeredFactDatabase, commands: &mut Commands) {
-        (self.action)(event, db, commands);
-    }
-}
-
-/// A rule definition containing trigger, condition, actions, modifications, and outputs.
-///
-/// 包含触发器、条件、动作、修改和输出的规则定义。
+/// 包含触发器、条件（表达式）、修改和输出的规则定义。
 #[derive(Clone)]
 pub struct Rule {
     /// Unique identifier for this rule.
@@ -270,11 +115,6 @@ pub struct Rule {
     /// 触发此规则的事件 ID。
     pub trigger: FactEventId,
 
-    /// Condition to check before executing (Always/Custom matching).
-    ///
-    /// 执行前要检查的条件（Always/Custom 匹配）。
-    pub condition: RuleCondition,
-
     /// Expression-based conditions (list of expression strings).
     /// All expressions must evaluate to true for the rule to fire.
     /// These are evaluated by the game engine's expression evaluator.
@@ -283,11 +123,6 @@ pub struct Rule {
     /// 所有表达式都必须评估为真才能触发规则。
     /// 这些由游戏引擎的表达式评估器评估。
     pub condition_expressions: Vec<String>,
-
-    /// Actions to execute when triggered and condition is met.
-    ///
-    /// 触发且条件满足时要执行的动作。
-    pub actions: Vec<RuleAction>,
 
     /// Modifications to apply to the fact database.
     ///
@@ -333,13 +168,6 @@ impl Rule {
     pub fn matches_event(&self, event: &FactEvent) -> bool {
         self.enabled && self.trigger == event.id
     }
-
-    /// Evaluate the condition against any fact reader.
-    ///
-    /// 根据任何事实读取器评估条件。
-    pub fn check_condition(&self, db: &impl FactReader) -> bool {
-        self.condition.evaluate(db)
-    }
 }
 
 /// Builder for constructing rules.
@@ -349,9 +177,7 @@ pub struct RuleBuilder {
     id: String,
     scope: RuleScope,
     trigger: FactEventId,
-    condition: RuleCondition,
     condition_expressions: Vec<String>,
-    actions: Vec<RuleAction>,
     modifications: Vec<FactModification>,
     outputs: Vec<FactEventId>,
     enabled: bool,
@@ -368,9 +194,7 @@ impl RuleBuilder {
             id: id.into(),
             scope: RuleScope::default(),
             trigger: trigger.into(),
-            condition: RuleCondition::Always,
             condition_expressions: Vec::new(),
-            actions: Vec::new(),
             modifications: Vec::new(),
             outputs: Vec::new(),
             enabled: true,
@@ -387,27 +211,11 @@ impl RuleBuilder {
         self
     }
 
-    /// Set the condition for this rule.
-    ///
-    /// 设置此规则的条件。
-    pub fn condition(mut self, condition: RuleCondition) -> Self {
-        self.condition = condition;
-        self
-    }
-
     /// Add a condition expression to this rule.
     ///
     /// 向此规则添加条件表达式。
     pub fn condition_expr(mut self, expr: impl Into<String>) -> Self {
         self.condition_expressions.push(expr.into());
-        self
-    }
-
-    /// Add an action to this rule.
-    ///
-    /// 向此规则添加动作。
-    pub fn action(mut self, action: RuleAction) -> Self {
-        self.actions.push(action);
         self
     }
 
@@ -459,9 +267,7 @@ impl RuleBuilder {
             id: self.id,
             scope: self.scope,
             trigger: self.trigger,
-            condition: self.condition,
             condition_expressions: self.condition_expressions,
-            actions: self.actions,
             modifications: self.modifications,
             outputs: self.outputs,
             enabled: self.enabled,
@@ -832,26 +638,9 @@ mod tests {
     use crate::FactDatabase;
 
     #[test]
-    fn test_rule_condition_evaluation() {
-        let mut db = FactDatabase::new();
-        db.set("counter", 5i64);
-        db.set("flag", true);
-
-        assert!(RuleCondition::Equals("counter".to_string(), FactValue::Int(5)).evaluate(&db));
-        assert!(RuleCondition::GreaterThan("counter".to_string(), 3).evaluate(&db));
-        assert!(RuleCondition::LessThan("counter".to_string(), 10).evaluate(&db));
-        assert!(RuleCondition::IsTrue("flag".to_string()).evaluate(&db));
-        assert!(RuleCondition::Exists("counter".to_string()).evaluate(&db));
-        assert!(RuleCondition::NotExists("missing".to_string()).evaluate(&db));
-    }
-
-    #[test]
     fn test_rule_builder() {
         let rule = Rule::builder("test_rule", "test_event")
-            .condition(RuleCondition::Equals(
-                "counter".to_string(),
-                FactValue::Int(3),
-            ))
+            .condition_expr("$counter == 3")
             .modify(FactModification::Set(
                 "result".to_string(),
                 FactValue::Bool(true),
@@ -864,92 +653,7 @@ mod tests {
         assert_eq!(rule.trigger.0, "test_event");
         assert_eq!(rule.priority, 10);
         assert!(rule.enabled);
-    }
-
-    #[test]
-    fn test_rule_condition_greater_or_equal() {
-        let mut db = FactDatabase::new();
-        db.set("value", 5i64);
-
-        assert!(RuleCondition::GreaterOrEqual("value".to_string(), 5).evaluate(&db));
-        assert!(RuleCondition::GreaterOrEqual("value".to_string(), 4).evaluate(&db));
-        assert!(!RuleCondition::GreaterOrEqual("value".to_string(), 6).evaluate(&db));
-    }
-
-    #[test]
-    fn test_rule_condition_less_or_equal() {
-        let mut db = FactDatabase::new();
-        db.set("value", 5i64);
-
-        assert!(RuleCondition::LessOrEqual("value".to_string(), 5).evaluate(&db));
-        assert!(RuleCondition::LessOrEqual("value".to_string(), 6).evaluate(&db));
-        assert!(!RuleCondition::LessOrEqual("value".to_string(), 4).evaluate(&db));
-    }
-
-    #[test]
-    fn test_rule_condition_is_false() {
-        let mut db = FactDatabase::new();
-        db.set("flag", false);
-
-        assert!(RuleCondition::IsFalse("flag".to_string()).evaluate(&db));
-        assert!(!RuleCondition::IsTrue("flag".to_string()).evaluate(&db));
-    }
-
-    #[test]
-    fn test_rule_condition_and() {
-        let mut db = FactDatabase::new();
-        db.set("a", true);
-        db.set("b", true);
-        db.set("c", false);
-
-        let cond = RuleCondition::And(vec![
-            RuleCondition::IsTrue("a".to_string()),
-            RuleCondition::IsTrue("b".to_string()),
-        ]);
-        assert!(cond.evaluate(&db));
-
-        let cond_false = RuleCondition::And(vec![
-            RuleCondition::IsTrue("a".to_string()),
-            RuleCondition::IsTrue("c".to_string()),
-        ]);
-        assert!(!cond_false.evaluate(&db));
-    }
-
-    #[test]
-    fn test_rule_condition_or() {
-        let mut db = FactDatabase::new();
-        db.set("a", true);
-        db.set("b", false);
-
-        let cond = RuleCondition::Or(vec![
-            RuleCondition::IsTrue("a".to_string()),
-            RuleCondition::IsTrue("b".to_string()),
-        ]);
-        assert!(cond.evaluate(&db));
-
-        let cond_all_false = RuleCondition::Or(vec![
-            RuleCondition::IsFalse("a".to_string()),
-            RuleCondition::IsTrue("b".to_string()),
-        ]);
-        assert!(!cond_all_false.evaluate(&db));
-    }
-
-    #[test]
-    fn test_rule_condition_not() {
-        let mut db = FactDatabase::new();
-        db.set("flag", false);
-
-        let cond = RuleCondition::Not(Box::new(RuleCondition::IsTrue("flag".to_string())));
-        assert!(cond.evaluate(&db));
-
-        db.set("flag", true);
-        assert!(!cond.evaluate(&db));
-    }
-
-    #[test]
-    fn test_rule_condition_always() {
-        let db = FactDatabase::new();
-        assert!(RuleCondition::Always.evaluate(&db));
+        assert_eq!(rule.condition_expressions, vec!["$counter == 3"]);
     }
 
     #[test]

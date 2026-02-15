@@ -8,7 +8,7 @@
 
 use crate::database::FactValue;
 use crate::event::FactEventId;
-use crate::rule::{FactModification, Rule, RuleCondition, RuleRegistry, RuleScope};
+use crate::rule::{FactModification, Rule, RuleRegistry, RuleScope};
 use bevy::asset::io::Reader;
 use bevy::asset::{Asset, AssetLoader, LoadContext};
 use bevy::prelude::*;
@@ -46,81 +46,6 @@ impl From<FactValueDef> for FactValue {
             FactValueDef::String(v) => FactValue::String(v),
             FactValueDef::StringList(v) => FactValue::StringList(v),
             FactValueDef::IntList(v) => FactValue::IntList(v),
-        }
-    }
-}
-
-// ============================================================================
-// Serializable Condition Types
-// ============================================================================
-
-/// Serializable condition definition for RON files.
-///
-/// RON 文件的可序列化条件定义。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RuleConditionDef {
-    /// Check if a fact equals a specific value.
-    Equals { key: String, value: FactValueDef },
-
-    /// Check if an integer fact is greater than a value.
-    GreaterThan { key: String, value: i64 },
-
-    /// Check if an integer fact is less than a value.
-    LessThan { key: String, value: i64 },
-
-    /// Check if an integer fact is greater than or equal to a value.
-    GreaterOrEqual { key: String, value: i64 },
-
-    /// Check if an integer fact is less than or equal to a value.
-    LessOrEqual { key: String, value: i64 },
-
-    /// Check if a fact exists.
-    Exists(String),
-
-    /// Check if a fact does not exist.
-    NotExists(String),
-
-    /// Check if a boolean fact is true.
-    IsTrue(String),
-
-    /// Check if a boolean fact is false.
-    IsFalse(String),
-
-    /// Logical AND of multiple conditions.
-    And(Vec<RuleConditionDef>),
-
-    /// Logical OR of multiple conditions.
-    Or(Vec<RuleConditionDef>),
-
-    /// Logical NOT of a condition.
-    Not(Box<RuleConditionDef>),
-
-    /// Always true (no condition).
-    Always,
-}
-
-impl From<RuleConditionDef> for RuleCondition {
-    fn from(def: RuleConditionDef) -> Self {
-        match def {
-            RuleConditionDef::Equals { key, value } => RuleCondition::Equals(key, value.into()),
-            RuleConditionDef::GreaterThan { key, value } => RuleCondition::GreaterThan(key, value),
-            RuleConditionDef::LessThan { key, value } => RuleCondition::LessThan(key, value),
-            RuleConditionDef::GreaterOrEqual { key, value } => {
-                RuleCondition::GreaterOrEqual(key, value)
-            }
-            RuleConditionDef::LessOrEqual { key, value } => RuleCondition::LessOrEqual(key, value),
-            RuleConditionDef::Exists(key) => RuleCondition::Exists(key),
-            RuleConditionDef::NotExists(key) => RuleCondition::NotExists(key),
-            RuleConditionDef::IsTrue(key) => RuleCondition::IsTrue(key),
-            RuleConditionDef::IsFalse(key) => RuleCondition::IsFalse(key),
-            RuleConditionDef::And(conditions) => {
-                RuleCondition::And(conditions.into_iter().map(Into::into).collect())
-            }
-            RuleConditionDef::Or(conditions) => {
-                RuleCondition::Or(conditions.into_iter().map(Into::into).collect())
-            }
-            RuleConditionDef::Not(condition) => RuleCondition::Not(Box::new((*condition).into())),
-            RuleConditionDef::Always => RuleCondition::Always,
         }
     }
 }
@@ -250,13 +175,6 @@ pub enum RuleActionDef {
     /// Log a message (for debugging).
     Log { message: String },
 
-    /// Set a resource field (requires game-specific handler).
-    SetResource {
-        resource: String,
-        field: String,
-        value: FactValueDef,
-    },
-
     /// Play a sound effect using fuzzy search.
     /// Uses audio::play_sound() which searches in the audios directory.
     ///
@@ -292,9 +210,6 @@ pub enum RuleActionDef {
     ///
     /// 发出 FRE 事件（用于规则链）。
     EmitEvent(String),
-
-    /// Spawn an entity (requires game-specific handler).
-    SpawnEntity { template: String },
 
     /// Custom action identified by name (handled by game code).
     Custom {
@@ -356,10 +271,6 @@ pub struct RuleDef {
     #[serde(default)]
     pub conditions: Vec<String>,
 
-    /// Internal condition field (used for Always/Custom matching).
-    #[serde(default = "default_condition")]
-    pub condition: RuleConditionDef,
-
     /// Actions to execute (data-driven, handled by game code).
     #[serde(default)]
     pub actions: Vec<RuleActionDef>,
@@ -387,10 +298,6 @@ pub struct RuleDef {
     /// 默认为 true。
     #[serde(default = "default_consume_event")]
     pub consume_event: bool,
-}
-
-fn default_condition() -> RuleConditionDef {
-    RuleConditionDef::Always
 }
 
 fn default_enabled() -> bool {
@@ -429,9 +336,7 @@ impl RuleDef {
             id,
             scope,
             trigger: FactEventId::new(self.event.to_event_id()),
-            condition: self.condition.clone().into(),
             condition_expressions: self.conditions.clone(),
-            actions: Vec::new(), // Actions are handled separately by game code
             modifications: self.modifications.iter().cloned().map(Into::into).collect(),
             outputs: self.outputs.iter().map(FactEventId::new).collect(),
             enabled: self.enabled,
@@ -642,14 +547,12 @@ impl ActionHandlerRegistry {
     ) {
         let action_type = match action {
             RuleActionDef::Log { .. } => "Log",
-            RuleActionDef::SetResource { .. } => "SetResource",
             RuleActionDef::PlaySound(_) => "PlaySound",
             RuleActionDef::PlaySoundFullPath(_) => "PlaySoundFullPath",
             RuleActionDef::SetLocalFact(_, _) => "SetLocalFact",
             RuleActionDef::CloseView => "CloseView",
             RuleActionDef::SwitchState(_) => "SwitchState",
             RuleActionDef::EmitEvent(_) => "EmitEvent",
-            RuleActionDef::SpawnEntity { .. } => "SpawnEntity",
             RuleActionDef::Custom { action_type, .. } => action_type.as_str(),
         };
 
@@ -693,7 +596,7 @@ mod tests {
         (
             id: "test_rule",
             event: Event("test_event"),
-            condition: Equals(key: "counter", value: Int(3)),
+            conditions: ["$counter == 3"],
             modifications: [
                 Set(key: "triggered", value: Bool(true)),
                 Increment(key: "counter", amount: 1),
@@ -773,20 +676,6 @@ mod tests {
         let asset: FreAsset = ron::from_str(fre_data).unwrap();
         assert_eq!(asset.rules.len(), 1);
         assert_eq!(asset.rules[0].event.to_event_id(), "custom_event");
-    }
-
-    #[test]
-    fn test_condition_conversion() {
-        let def = RuleConditionDef::And(vec![
-            RuleConditionDef::GreaterThan {
-                key: "health".to_string(),
-                value: 0,
-            },
-            RuleConditionDef::IsTrue("alive".to_string()),
-        ]);
-
-        let _condition: RuleCondition = def.into();
-        // Conversion should not panic
     }
 
     #[test]

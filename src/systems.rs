@@ -37,7 +37,6 @@ pub struct PendingFactEvents {
 /// 3. 当规则匹配并消费事件时，不再检查更多规则
 /// 4. 当规则匹配但不消费事件时，继续检查同一组内的规则
 pub fn process_rules_system(
-    mut commands: Commands,
     mut events: MessageReader<FactEvent>,
     mut layered_db: ResMut<LayeredFactDatabase>,
     registry: Res<LayeredRuleRegistry>,
@@ -52,10 +51,9 @@ pub fn process_rules_system(
 
         'outer: for group in rule_groups {
             for rule in group {
-                // Check condition using LayeredFactDatabase (local-first, then global)
-                if !rule.check_condition(&*layered_db) {
-                    continue;
-                }
+                // Note: condition_expressions are evaluated by the game engine's expression evaluator,
+                // not here. This base system only handles rule matching by event and priority.
+                // Game code (e.g., fre_bridge.rs) should override or extend this behavior.
 
                 info!(
                     "FRE: Rule '{}' triggered by event '{}' (priority: {}, conditions: {})",
@@ -64,11 +62,6 @@ pub fn process_rules_system(
                     rule.priority,
                     rule.condition_expressions.len()
                 );
-
-                // Execute actions
-                for action in &rule.actions {
-                    action.execute(&event, &layered_db, &mut commands);
-                }
 
                 // Apply modifications to LayeredFactDatabase (local layer)
                 for modification in &rule.modifications {
@@ -108,19 +101,15 @@ pub fn emit_pending_events_system(
 mod tests {
     use super::*;
     use crate::database::FactValue;
-    use crate::rule::{FactModification, Rule, RuleCondition, RuleRegistry};
+    use crate::rule::{FactModification, Rule, RuleRegistry};
 
     #[test]
     fn test_rule_registry_matching() {
         let mut registry = RuleRegistry::new();
 
-        let rule1 = Rule::builder("rule1", "event_a")
-            .condition(RuleCondition::Always)
-            .build();
+        let rule1 = Rule::builder("rule1", "event_a").build();
 
-        let rule2 = Rule::builder("rule2", "event_b")
-            .condition(RuleCondition::Always)
-            .build();
+        let rule2 = Rule::builder("rule2", "event_b").build();
 
         registry.register(rule1);
         registry.register(rule2);
