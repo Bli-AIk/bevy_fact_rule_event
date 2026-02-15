@@ -50,6 +50,7 @@ pub use layered::LayeredFactDatabase;
 pub use rule::{
     FactModification, LayeredRuleRegistry, Rule, RuleAction, RuleCondition, RuleRegistry, RuleScope,
 };
+pub use systems::PendingFactEvents;
 
 use bevy::asset::AssetApp;
 use bevy::prelude::*;
