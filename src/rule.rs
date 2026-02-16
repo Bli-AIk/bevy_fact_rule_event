@@ -8,6 +8,7 @@
 
 use crate::database::FactValue;
 use crate::event::{FactEvent, FactEventId};
+use crate::expr;
 use crate::layered::LayeredFactDatabase;
 use bevy::prelude::*;
 use std::collections::{BTreeMap, HashMap};
@@ -56,10 +57,50 @@ pub enum FactModification {
     /// 将事实设置为特定值。
     Set(String, FactValue),
 
-    /// Increment an integer fact by a value.
+    /// Increment an integer fact by a value (legacy, use Add for new code).
     ///
-    /// 将整数事实增加指定值。
+    /// 将整数事实增加指定值（旧版，新代码请用 Add）。
     Increment(String, i64),
+
+    /// Add a numeric value to a fact.
+    ///
+    /// 向事实添加数值。
+    Add(String, f64),
+
+    /// Subtract a numeric value from a fact.
+    ///
+    /// 从事实减去数值。
+    Sub(String, f64),
+
+    /// Multiply a fact by a numeric value.
+    ///
+    /// 将事实乘以数值。
+    Mul(String, f64),
+
+    /// Divide a fact by a numeric value.
+    ///
+    /// 将事实除以数值。
+    Div(String, f64),
+
+    /// Apply modulo operation to a fact.
+    ///
+    /// 对事实应用取模运算。
+    Mod(String, i64),
+
+    /// Clamp a fact value between min and max.
+    ///
+    /// 将事实值限制在 min 和 max 之间。
+    Clamp(String, f64, f64),
+
+    /// Wrap a fact value within a range [min, max).
+    ///
+    /// 将事实值包裹在范围 [min, max) 内。
+    Wrap(String, i64, i64),
+
+    /// Evaluate an expression and store the result in a fact.
+    ///
+    /// 评估表达式并将结果存储在事实中。
+    Eval(String, String),
 
     /// Remove a fact.
     ///
@@ -83,6 +124,32 @@ impl FactModification {
             }
             FactModification::Increment(key, amount) => {
                 db.increment(key, *amount);
+            }
+            FactModification::Add(key, amount) => {
+                db.add(key, *amount);
+            }
+            FactModification::Sub(key, amount) => {
+                db.sub(key, *amount);
+            }
+            FactModification::Mul(key, factor) => {
+                db.mul(key, *factor);
+            }
+            FactModification::Div(key, divisor) => {
+                db.div(key, *divisor);
+            }
+            FactModification::Mod(key, divisor) => {
+                db.modulo(key, *divisor);
+            }
+            FactModification::Clamp(key, min, max) => {
+                db.clamp(key, *min, *max);
+            }
+            FactModification::Wrap(key, min, max) => {
+                db.wrap(key, *min, *max);
+            }
+            FactModification::Eval(key, expression) => {
+                if let Some(value) = expr::evaluate_expr_to_fact(expression, db) {
+                    db.set_local(key.as_str(), value);
+                }
             }
             FactModification::Remove(key) => {
                 db.remove(key);

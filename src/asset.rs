@@ -62,8 +62,32 @@ pub enum FactModificationDef {
     /// Set a fact to a specific value.
     Set { key: String, value: FactValueDef },
 
-    /// Increment an integer fact by a value.
+    /// Increment an integer fact by a value (legacy, use Add for new code).
     Increment { key: String, amount: i64 },
+
+    /// Add a numeric value to a fact.
+    Add { key: String, value: f64 },
+
+    /// Subtract a numeric value from a fact.
+    Sub { key: String, value: f64 },
+
+    /// Multiply a fact by a numeric value.
+    Mul { key: String, value: f64 },
+
+    /// Divide a fact by a numeric value.
+    Div { key: String, value: f64 },
+
+    /// Apply modulo operation to a fact.
+    Mod { key: String, value: i64 },
+
+    /// Clamp a fact value between min and max.
+    Clamp { key: String, min: f64, max: f64 },
+
+    /// Wrap a fact value within a range [min, max).
+    Wrap { key: String, min: i64, max: i64 },
+
+    /// Evaluate an expression and store the result in a fact.
+    Eval { key: String, expr: String },
 
     /// Remove a fact.
     Remove(String),
@@ -79,6 +103,14 @@ impl From<FactModificationDef> for FactModification {
             FactModificationDef::Increment { key, amount } => {
                 FactModification::Increment(key, amount)
             }
+            FactModificationDef::Add { key, value } => FactModification::Add(key, value),
+            FactModificationDef::Sub { key, value } => FactModification::Sub(key, value),
+            FactModificationDef::Mul { key, value } => FactModification::Mul(key, value),
+            FactModificationDef::Div { key, value } => FactModification::Div(key, value),
+            FactModificationDef::Mod { key, value } => FactModification::Mod(key, value),
+            FactModificationDef::Clamp { key, min, max } => FactModification::Clamp(key, min, max),
+            FactModificationDef::Wrap { key, min, max } => FactModification::Wrap(key, min, max),
+            FactModificationDef::Eval { key, expr } => FactModification::Eval(key, expr),
             FactModificationDef::Remove(key) => FactModification::Remove(key),
             FactModificationDef::Toggle(key) => FactModification::Toggle(key),
         }

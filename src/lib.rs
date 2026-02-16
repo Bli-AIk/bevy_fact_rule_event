@@ -34,6 +34,7 @@
 pub mod asset;
 mod database;
 mod event;
+pub mod expr;
 mod layered;
 mod rule;
 mod systems;

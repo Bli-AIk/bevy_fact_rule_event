@@ -186,6 +186,138 @@ impl LayeredFactDatabase {
         self.global.set(key, current + amount);
     }
 
+    /// Add a numeric value to a fact (supports Int and Float).
+    /// If Int + Float, result is Float.
+    ///
+    /// 向事实添加数值（支持 Int 和 Float）。
+    /// 如果 Int + Float，结果为 Float。
+    pub fn add(&mut self, key: &str, amount: f64) {
+        match self.get_by_str(key) {
+            Some(FactValue::Int(i)) => {
+                if amount.fract() == 0.0 {
+                    self.local.set(key, *i + amount as i64);
+                } else {
+                    self.local.set(key, FactValue::Float(*i as f64 + amount));
+                }
+            }
+            Some(FactValue::Float(f)) => {
+                self.local.set(key, FactValue::Float(*f + amount));
+            }
+            _ => {
+                if amount.fract() == 0.0 {
+                    self.local.set(key, amount as i64);
+                } else {
+                    self.local.set(key, FactValue::Float(amount));
+                }
+            }
+        }
+    }
+
+    /// Subtract a numeric value from a fact.
+    ///
+    /// 从事实减去数值。
+    pub fn sub(&mut self, key: &str, amount: f64) {
+        self.add(key, -amount);
+    }
+
+    /// Multiply a fact by a numeric value.
+    ///
+    /// 将事实乘以数值。
+    pub fn mul(&mut self, key: &str, factor: f64) {
+        match self.get_by_str(key) {
+            Some(FactValue::Int(i)) => {
+                let result = *i as f64 * factor;
+                if result.fract() == 0.0 {
+                    self.local.set(key, result as i64);
+                } else {
+                    self.local.set(key, FactValue::Float(result));
+                }
+            }
+            Some(FactValue::Float(f)) => {
+                self.local.set(key, FactValue::Float(*f * factor));
+            }
+            _ => {
+                // No-op if fact doesn't exist
+            }
+        }
+    }
+
+    /// Divide a fact by a numeric value.
+    /// Division by zero sets the fact to 0.
+    ///
+    /// 将事实除以数值。
+    /// 除以零时将事实设为 0。
+    pub fn div(&mut self, key: &str, divisor: f64) {
+        if divisor == 0.0 {
+            self.local.set(key, 0i64);
+            return;
+        }
+        match self.get_by_str(key) {
+            Some(FactValue::Int(i)) => {
+                let result = *i as f64 / divisor;
+                if result.fract() == 0.0 {
+                    self.local.set(key, result as i64);
+                } else {
+                    self.local.set(key, FactValue::Float(result));
+                }
+            }
+            Some(FactValue::Float(f)) => {
+                self.local.set(key, FactValue::Float(*f / divisor));
+            }
+            _ => {
+                // No-op if fact doesn't exist
+            }
+        }
+    }
+
+    /// Apply modulo operation to a fact.
+    ///
+    /// 对事实应用取模运算。
+    pub fn modulo(&mut self, key: &str, divisor: i64) {
+        if divisor == 0 {
+            return;
+        }
+        if let Some(i) = self.get_int(key) {
+            self.local.set(key, i % divisor);
+        }
+    }
+
+    /// Clamp a fact value between min and max (inclusive).
+    ///
+    /// 将事实值限制在 min 和 max 之间（包含）。
+    pub fn clamp(&mut self, key: &str, min: f64, max: f64) {
+        match self.get_by_str(key) {
+            Some(FactValue::Int(i)) => {
+                let clamped = (*i as f64).clamp(min, max);
+                if clamped.fract() == 0.0 {
+                    self.local.set(key, clamped as i64);
+                } else {
+                    self.local.set(key, FactValue::Float(clamped));
+                }
+            }
+            Some(FactValue::Float(f)) => {
+                self.local.set(key, FactValue::Float(f.clamp(min, max)));
+            }
+            _ => {}
+        }
+    }
+
+    /// Wrap a fact value within a range [min, max).
+    /// When value >= max, it wraps to min. When value < min, it wraps to max - 1.
+    ///
+    /// 将事实值包裹在范围 [min, max) 内。
+    /// 当值 >= max 时，包裹到 min。当值 < min 时，包裹到 max - 1。
+    pub fn wrap(&mut self, key: &str, min: i64, max: i64) {
+        if max <= min {
+            return;
+        }
+        if let Some(i) = self.get_int(key) {
+            let range = max - min;
+            let wrapped = ((i - min) % range + range) % range + min;
+            self.local.set(key, wrapped);
+        }
+    }
+
     /// Remove a fact from the local layer.
     ///
     /// 从局部层移除事实。
