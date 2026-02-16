@@ -11,11 +11,43 @@ use bevy::prelude::*;
 use std::sync::Arc;
 
 /// Resource to queue output events between systems.
+/// Provides deduplication to prevent duplicate events from multiple rule processors.
 ///
 /// 用于在系统之间排队输出事件的资源。
+/// 提供去重功能，防止多个规则处理器产生重复事件。
 #[derive(Resource, Default)]
 pub struct PendingFactEvents {
     pub events: Vec<FactEvent>,
+    /// Track rule IDs that have already emitted outputs this frame to avoid duplicates.
+    ///
+    /// 跟踪本帧已发出 outputs 的规则 ID，以避免重复。
+    emitted_by_rule: std::collections::HashSet<String>,
+}
+
+impl PendingFactEvents {
+    /// Queue an output event from a rule, with deduplication.
+    /// Returns true if the event was queued, false if it was already queued by this rule.
+    ///
+    /// 从规则排队输出事件，带去重。
+    /// 如果事件被排队返回 true，如果此规则已排队过则返回 false。
+    pub fn queue_output(&mut self, rule_id: &str, event: FactEvent) -> bool {
+        let key = format!("{}:{}", rule_id, event.id.0);
+        if self.emitted_by_rule.contains(&key) {
+            return false;
+        }
+        self.emitted_by_rule.insert(key);
+        self.events.push(event);
+        true
+    }
+
+    /// Clear the emitted tracking for the next frame.
+    /// Called after events are drained.
+    ///
+    /// 清除发出跟踪以准备下一帧。
+    /// 在事件被排空后调用。
+    pub fn clear_tracking(&mut self) {
+        self.emitted_by_rule.clear();
+    }
 }
 
 /// Trait for evaluating rule condition expressions.
@@ -139,11 +171,9 @@ pub fn process_rules_system(
                     modification.apply(&mut layered_db);
                 }
 
-                // Queue output events for next frame
+                // Queue output events for next frame (with deduplication)
                 for output_id in &rule.outputs {
-                    pending_events
-                        .events
-                        .push(FactEvent::new(output_id.clone()));
+                    pending_events.queue_output(&rule.id, FactEvent::new(output_id.clone()));
                 }
 
                 // If this rule consumes the event, stop processing all rules
@@ -166,6 +196,8 @@ pub fn emit_pending_events_system(
     for event in pending_events.events.drain(..) {
         event_writer.write(event);
     }
+    // Clear deduplication tracking for the next frame
+    pending_events.clear_tracking();
 }
 
 #[cfg(test)]
