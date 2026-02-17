@@ -306,6 +306,22 @@ impl FactDatabase {
         self.facts.insert(key.into(), value.into());
     }
 
+    /// Set a fact value only if it's different from the current value.
+    /// Returns true if the value was changed, false otherwise.
+    ///
+    /// 仅当值与当前值不同时才设置。
+    /// 如果值被更改返回 true，否则返回 false。
+    pub fn set_if_changed(&mut self, key: impl Into<FactKey>, value: impl Into<FactValue>) -> bool {
+        let key = key.into();
+        let value = value.into();
+        if self.facts.get(&key) != Some(&value) {
+            self.facts.insert(key, value);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Get a fact value from the database.
     ///
     /// 从数据库中获取一个事实值。

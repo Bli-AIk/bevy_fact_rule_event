@@ -72,7 +72,7 @@ impl Plugin for FREPlugin {
                 Update,
                 (
                     systems::emit_pending_events_system,
-                    systems::process_rules_system,
+                    systems::process_rules_system.run_if(systems::has_fact_events),
                 )
                     .chain(),
             );

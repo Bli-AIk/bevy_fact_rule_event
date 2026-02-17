@@ -200,6 +200,12 @@ pub fn emit_pending_events_system(
     pending_events.clear_tracking();
 }
 
+/// Run condition: returns true if there are events to process.
+/// 运行条件：如果有事件需要处理则返回 true。
+pub fn has_fact_events(events: MessageReader<FactEvent>) -> bool {
+    !events.is_empty()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

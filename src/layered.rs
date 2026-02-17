@@ -152,6 +152,15 @@ impl LayeredFactDatabase {
         self.local.set(key, value);
     }
 
+    /// Set a fact value in the local layer only if it's different from the current value.
+    /// Returns true if the value was changed, false otherwise.
+    ///
+    /// 仅当值与当前值不同时才在局部层设置。
+    /// 如果值被更改返回 true，否则返回 false。
+    pub fn set_if_changed(&mut self, key: impl Into<FactKey>, value: impl Into<FactValue>) -> bool {
+        self.local.set_if_changed(key, value)
+    }
+
     /// Alias for `set` - explicitly writes to local layer.
     ///
     /// `set` 的别名 - 显式写入局部层。
@@ -166,6 +175,19 @@ impl LayeredFactDatabase {
     /// 谨慎使用 - 仅用于必须跨状态转换持久化的数据。
     pub fn set_global(&mut self, key: impl Into<FactKey>, value: impl Into<FactValue>) {
         self.global.set(key, value);
+    }
+
+    /// Set a fact value in the global layer only if it's different from the current value.
+    /// Returns true if the value was changed, false otherwise.
+    ///
+    /// 仅当值与当前值不同时才在全局层设置。
+    /// 如果值被更改返回 true，否则返回 false。
+    pub fn set_global_if_changed(
+        &mut self,
+        key: impl Into<FactKey>,
+        value: impl Into<FactValue>,
+    ) -> bool {
+        self.global.set_if_changed(key, value)
     }
 
     /// Increment an integer fact in the local layer.
