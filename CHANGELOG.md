@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/Bli-AIk/bevy_fact_rule_event/compare/v0.3.0...v0.4.0) - 2026-02-22
+
+### Added
+
+- *(database)* add set_if_changed method to FactDatabase and LayeredFactDatabase
+- *(fact-modifications)* extend fact modification operations with arithmetic and expression support
+- *(bevy_fact_rule_event)* add extensible condition evaluator for rules
+- *(fre)* add rule output event queuing and improve dialogue handling
+- *(database)* add list type support for FactValue and FactReader
+
+### Fixed
+
+- *(expr)* correct expression logic
+- *(bevy_fact_rule_event)* correct sound asset path
+- *(asset)* convert action names to lowercase in event IDs
+
+### Refactor
+
+- *(expr, rule)* fix unary minus parsing and modulo operator
+- *(example_mod)* update dialogue formatting and layout
+- *(rule)* remove RuleCondition and RuleAction, use expression-based conditions
+
 ## [0.3.0](https://github.com/Bli-AIk/bevy_fact_rule_event/compare/v0.2.0...v0.3.0) - 2026-02-11
 
 ### Added
