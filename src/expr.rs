@@ -263,10 +263,11 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_simple_number() {
         let db = LayeredFactDatabase::default();
         assert_eq!(evaluate_expr("42", &db), Some(42.0));
-        assert_eq!(evaluate_expr("3.14", &db), Some(3.14));
+        assert_eq!(evaluate_expr("3.14", &db), Some(3.14_f64));
         assert_eq!(evaluate_expr("-5", &db), Some(-5.0));
     }
 
