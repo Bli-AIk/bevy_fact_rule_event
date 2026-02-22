@@ -702,7 +702,6 @@ impl LayeredRuleRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::FactDatabase;
 
     #[test]
     fn test_rule_builder() {

@@ -128,26 +128,25 @@ fn tokenize(expr: &str, db: &LayeredFactDatabase) -> Option<Vec<Token>> {
         match c {
             '+' | '-' | '*' | '/' | '%' => {
                 // For '-', check if it's a unary minus (negation)
-                if c == '-' {
-                    if tokens.is_empty()
-                        || matches!(tokens.last(), Some(Token::Op(_)) | Some(Token::LParen))
-                    {
-                        // Parse the number including the minus sign
-                        let start = i;
+                if c == '-'
+                    && (tokens.is_empty()
+                        || matches!(tokens.last(), Some(Token::Op(_)) | Some(Token::LParen)))
+                {
+                    // Parse the number including the minus sign
+                    let start = i;
+                    i += 1;
+                    while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
                         i += 1;
-                        while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
-                            i += 1;
-                        }
-                        // Check if we actually got digits after the minus
-                        if i > start + 1 {
-                            let num_str = &expr[start..i];
-                            let num: f64 = num_str.parse().ok()?;
-                            tokens.push(Token::Number(num));
-                            continue;
-                        } else {
-                            // It's just a minus sign, treat as operator
-                            i = start;
-                        }
+                    }
+                    // Check if we actually got digits after the minus
+                    if i > start + 1 {
+                        let num_str = &expr[start..i];
+                        let num: f64 = num_str.parse().ok()?;
+                        tokens.push(Token::Number(num));
+                        continue;
+                    } else {
+                        // It's just a minus sign, treat as operator
+                        i = start;
                     }
                 }
                 tokens.push(Token::Op(c));
@@ -221,7 +220,7 @@ fn parse_multiplicative(tokens: &[Token], start: usize) -> Option<(f64, usize)> 
             Token::Op('%') => {
                 let (right, next) = parse_primary(tokens, idx + 1)?;
                 if right != 0.0 {
-                    left = left % right;
+                    left %= right;
                 } else {
                     left = 0.0; // Mod by zero = 0
                 }
