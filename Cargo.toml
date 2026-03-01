@@ -5,6 +5,7 @@ edition = "2024"
 authors = ["Bli-AIk <haikun2333@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Bli-AIk/bevy_fact_rule_event"
+readme = "readme.md"
 description = "Fact-Rule-Event system for Bevy engine"
 exclude = [
     "target/*",
