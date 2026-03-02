@@ -568,6 +568,13 @@ impl ActionHandlerRegistry {
             .insert(action_type.to_string(), Box::new(handler));
     }
 
+    /// Check if a handler is registered for the given action type.
+    ///
+    /// 检查是否为给定的动作类型注册了处理程序。
+    pub fn has_handler(&self, action_type: &str) -> bool {
+        self.handlers.contains_key(action_type)
+    }
+
     /// Execute an action using the registered handler.
     ///
     /// 使用注册的处理程序执行动作。
