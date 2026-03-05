@@ -51,25 +51,30 @@ pub use rule::{FactModification, LayeredRuleRegistry, Rule, RuleRegistry, RuleSc
 pub use systems::{ConditionEvaluator, ConditionEvaluatorTrait, PendingFactEvents};
 
 use bevy::asset::AssetApp;
+use bevy::ecs::schedule::{InternedScheduleLabel, ScheduleLabel};
 use bevy::prelude::*;
 
 /// Main plugin for the FRE system.
 ///
 /// FRE 系统的主插件。
-pub struct FREPlugin;
+#[derive(Default)]
+pub struct FREPlugin {
+    pub schedule: Option<InternedScheduleLabel>,
+}
 
 impl Plugin for FREPlugin {
     fn build(&self, app: &mut App) {
+        let schedule = self.schedule.unwrap_or(Update.intern());
         app.init_resource::<LayeredFactDatabase>()
             .init_resource::<LayeredRuleRegistry>()
             .init_resource::<ActionHandlerRegistry>()
-            .init_resource::<systems::PendingFactEvents>()
-            .init_resource::<systems::ConditionEvaluator>()
+            .init_resource::<PendingFactEvents>()
+            .init_resource::<ConditionEvaluator>()
             .init_asset::<FreAsset>()
             .register_asset_loader(FreAssetLoader)
             .add_message::<FactEvent>()
             .add_systems(
-                Update,
+                schedule,
                 (
                     systems::emit_pending_events_system,
                     systems::process_rules_system.run_if(systems::has_fact_events),
