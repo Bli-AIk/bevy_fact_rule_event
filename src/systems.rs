@@ -143,44 +143,53 @@ pub fn process_rules_system(
     mut pending_events: ResMut<PendingFactEvents>,
     condition_evaluator: Res<ConditionEvaluator>,
 ) {
-    // Collect events to process
     let events_to_process: Vec<FactEvent> = events.read().cloned().collect();
 
     for event in events_to_process {
-        // Get all rules grouped by priority
         let rule_groups = registry.get_matching_rules_grouped(&event);
+        process_event_rules(
+            &event,
+            rule_groups,
+            &mut layered_db,
+            &mut pending_events,
+            &condition_evaluator,
+        );
+    }
+}
 
-        'outer: for group in rule_groups {
-            for rule in group {
-                // Evaluate condition expressions using the provided evaluator
-                if !condition_evaluator.evaluate(rule, &layered_db) {
-                    trace!("FRE: Rule '{}' skipped - conditions not met", rule.id);
-                    continue;
-                }
+/// Process a single event against prioritized rule groups.
+fn process_event_rules(
+    event: &FactEvent,
+    rule_groups: Vec<Vec<&Rule>>,
+    layered_db: &mut LayeredFactDatabase,
+    pending_events: &mut PendingFactEvents,
+    condition_evaluator: &ConditionEvaluator,
+) {
+    'outer: for group in rule_groups {
+        for rule in group {
+            if !condition_evaluator.evaluate(rule, layered_db) {
+                trace!("FRE: Rule '{}' skipped - conditions not met", rule.id);
+                continue;
+            }
 
-                info!(
-                    "FRE: Rule '{}' triggered by event '{}' (priority: {}, conditions: {})",
-                    rule.id,
-                    event.id.0,
-                    rule.priority,
-                    rule.condition_expressions.len()
-                );
+            info!(
+                "FRE: Rule '{}' triggered by event '{}' (priority: {}, conditions: {})",
+                rule.id,
+                event.id.0,
+                rule.priority,
+                rule.condition_expressions.len()
+            );
 
-                // Apply modifications to LayeredFactDatabase (local layer)
-                for modification in &rule.modifications {
-                    modification.apply(&mut layered_db);
-                }
+            for modification in &rule.modifications {
+                modification.apply(layered_db);
+            }
 
-                // Queue output events for next frame (with deduplication)
-                for output_id in &rule.outputs {
-                    pending_events.queue_output(&rule.id, FactEvent::new(output_id.clone()));
-                }
+            for output_id in &rule.outputs {
+                pending_events.queue_output(&rule.id, FactEvent::new(output_id.clone()));
+            }
 
-                // If this rule consumes the event, stop processing all rules
-                if rule.consume_event {
-                    break 'outer;
-                }
-                // Otherwise, continue checking rules in this priority group
+            if rule.consume_event {
+                break 'outer;
             }
         }
     }

@@ -450,17 +450,11 @@ impl RuleRegistry {
                 let rule_a = self.rules.get(a);
                 let rule_b = self.rules.get(b);
                 match (rule_a, rule_b) {
-                    (Some(a), Some(b)) => {
-                        // First by priority (descending)
-                        let priority_cmp = b.priority.cmp(&a.priority);
-                        if priority_cmp != std::cmp::Ordering::Equal {
-                            return priority_cmp;
-                        }
-                        // Then by condition count (ascending)
+                    (Some(a), Some(b)) => b.priority.cmp(&a.priority).then_with(|| {
                         a.condition_expressions
                             .len()
                             .cmp(&b.condition_expressions.len())
-                    }
+                    }),
                     _ => std::cmp::Ordering::Equal,
                 }
             });
@@ -612,12 +606,13 @@ impl LayeredRuleRegistry {
                 all_groups.entry(rule.priority).or_default().push(rule);
             }
         }
-        for registry in self.view.values() {
-            for rule in registry.iter() {
-                if rule.matches_event(event) {
-                    all_groups.entry(rule.priority).or_default().push(rule);
-                }
-            }
+        for rule in self
+            .view
+            .values()
+            .flat_map(|r| r.iter())
+            .filter(|r| r.matches_event(event))
+        {
+            all_groups.entry(rule.priority).or_default().push(rule);
         }
 
         // Sort each group by condition count (fewer first)

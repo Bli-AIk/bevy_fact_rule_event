@@ -59,6 +59,41 @@ enum Token {
     RParen,
 }
 
+/// Convert a FactValue to f64 for expression evaluation.
+fn fact_value_to_f64(value: &FactValue) -> Option<f64> {
+    match value {
+        FactValue::Int(v) => Some(*v as f64),
+        FactValue::Float(v) => Some(*v),
+        FactValue::Bool(v) => Some(if *v { 1.0 } else { 0.0 }),
+        _ => None,
+    }
+}
+
+/// Try to parse a unary minus followed by digits at `start`. Returns (number, new_index).
+fn try_parse_unary_minus(
+    c: char,
+    tokens: &[Token],
+    chars: &[char],
+    expr: &str,
+    start: usize,
+) -> Option<(f64, usize)> {
+    if c != '-' {
+        return None;
+    }
+    if !tokens.is_empty() && !matches!(tokens.last(), Some(Token::Op(_)) | Some(Token::LParen)) {
+        return None;
+    }
+    let mut i = start + 1;
+    while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
+        i += 1;
+    }
+    if i <= start + 1 {
+        return None;
+    }
+    let num: f64 = expr[start..i].parse().ok()?;
+    Some((num, i))
+}
+
 /// Tokenize an expression string, resolving $variables to their values.
 fn tokenize(expr: &str, db: &LayeredFactDatabase) -> Option<Vec<Token>> {
     let mut tokens = Vec::new();
@@ -84,22 +119,7 @@ fn tokenize(expr: &str, db: &LayeredFactDatabase) -> Option<Vec<Token>> {
             }
             let key = &expr[start..i];
 
-            // Look up the value in the database
-            let value = match db.get_by_str(key) {
-                Some(FactValue::Int(v)) => *v as f64,
-                Some(FactValue::Float(v)) => *v,
-                Some(FactValue::Bool(v)) => {
-                    if *v {
-                        1.0
-                    } else {
-                        0.0
-                    }
-                }
-                _ => {
-                    // Unknown variable, return None
-                    return None;
-                }
-            };
+            let value = db.get_by_str(key).and_then(fact_value_to_f64)?;
             tokens.push(Token::Number(value));
             continue;
         }
@@ -127,27 +147,10 @@ fn tokenize(expr: &str, db: &LayeredFactDatabase) -> Option<Vec<Token>> {
 
         match c {
             '+' | '-' | '*' | '/' | '%' => {
-                // For '-', check if it's a unary minus (negation)
-                if c == '-'
-                    && (tokens.is_empty()
-                        || matches!(tokens.last(), Some(Token::Op(_)) | Some(Token::LParen)))
-                {
-                    // Parse the number including the minus sign
-                    let start = i;
-                    i += 1;
-                    while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
-                        i += 1;
-                    }
-                    // Check if we actually got digits after the minus
-                    if i > start + 1 {
-                        let num_str = &expr[start..i];
-                        let num: f64 = num_str.parse().ok()?;
-                        tokens.push(Token::Number(num));
-                        continue;
-                    } else {
-                        // It's just a minus sign, treat as operator
-                        i = start;
-                    }
+                if let Some((num, new_i)) = try_parse_unary_minus(c, &tokens, &chars, expr, i) {
+                    tokens.push(Token::Number(num));
+                    i = new_i;
+                    continue;
                 }
                 tokens.push(Token::Op(c));
                 i += 1;
@@ -263,7 +266,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::approx_constant)]
+    #[expect(clippy::approx_constant)] // reason: test uses PI-like value intentionally
     fn test_simple_number() {
         let db = LayeredFactDatabase::default();
         assert_eq!(evaluate_expr("42", &db), Some(42.0));
