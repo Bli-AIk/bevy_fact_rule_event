@@ -13,7 +13,12 @@ exclude = [
 ]
 
 [dependencies]
-bevy = "0.18"
+bevy = { version = "0.18", default-features = false, features = [
+    "std",
+    "bevy_asset",
+    "bevy_log",
+    "reflect_auto_register",
+] }
 serde = { version = "1.0", features = ["derive"] }
 ron = "0.10"
 anyhow = "1.0"
