@@ -344,6 +344,14 @@ impl RuleBuilder {
     }
 }
 
+fn compare_by_priority(a: &Rule, b: &Rule) -> std::cmp::Ordering {
+    b.priority.cmp(&a.priority).then_with(|| {
+        a.condition_expressions
+            .len()
+            .cmp(&b.condition_expressions.len())
+    })
+}
+
 /// Registry for storing and managing rules.
 ///
 /// 用于存储和管理规则的注册表。
@@ -446,18 +454,11 @@ impl RuleRegistry {
         // Rebuild sorted list if dirty
         if self.dirty {
             self.sorted_rules = self.rules.keys().cloned().collect();
-            self.sorted_rules.sort_by(|a, b| {
-                let rule_a = self.rules.get(a);
-                let rule_b = self.rules.get(b);
-                match (rule_a, rule_b) {
-                    (Some(a), Some(b)) => b.priority.cmp(&a.priority).then_with(|| {
-                        a.condition_expressions
-                            .len()
-                            .cmp(&b.condition_expressions.len())
-                    }),
+            self.sorted_rules
+                .sort_by(|a, b| match (self.rules.get(a), self.rules.get(b)) {
+                    (Some(a), Some(b)) => compare_by_priority(a, b),
                     _ => std::cmp::Ordering::Equal,
-                }
-            });
+                });
             self.dirty = false;
         }
 
