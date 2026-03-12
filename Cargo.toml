@@ -20,5 +20,5 @@ bevy = { version = "0.18", default-features = false, features = [
     "reflect_auto_register",
 ] }
 serde = { version = "1.0", features = ["derive"] }
-ron = "0.10"
+ron = "0.12"
 anyhow = "1.0"
