@@ -4,6 +4,8 @@
 //!
 //! FRE 循环处理的核心系统。
 
+use crate::asset::EnumRegistry;
+use crate::database::FactReader;
 use crate::event::FactEvent;
 use crate::layered::LayeredFactDatabase;
 use crate::rule::{LayeredRuleRegistry, Rule};
@@ -61,7 +63,8 @@ pub trait ConditionEvaluatorTrait: Send + Sync + 'static {
     ///
     /// 评估规则的所有条件表达式。
     /// 如果所有条件都通过或没有条件，返回 true。
-    fn evaluate(&self, conditions: &[String], facts: &LayeredFactDatabase) -> bool;
+    fn evaluate(&self, conditions: &[String], facts: &dyn FactReader, enums: &EnumRegistry)
+    -> bool;
 }
 
 /// Default condition evaluator that always returns true (matches "Always" behavior).
@@ -71,7 +74,12 @@ pub trait ConditionEvaluatorTrait: Send + Sync + 'static {
 pub struct DefaultConditionEvaluator;
 
 impl ConditionEvaluatorTrait for DefaultConditionEvaluator {
-    fn evaluate(&self, _conditions: &[String], _facts: &LayeredFactDatabase) -> bool {
+    fn evaluate(
+        &self,
+        _conditions: &[String],
+        _facts: &dyn FactReader,
+        _enums: &EnumRegistry,
+    ) -> bool {
         // Default: if no conditions, return true; otherwise also return true (no evaluation)
         // This maintains backward compatibility - rules without conditions always match
         true
@@ -109,11 +117,12 @@ impl ConditionEvaluator {
     /// Evaluate conditions for a rule.
     ///
     /// 评估规则的条件。
-    pub fn evaluate(&self, rule: &Rule, facts: &LayeredFactDatabase) -> bool {
+    pub fn evaluate(&self, rule: &Rule, facts: &dyn FactReader, enums: &EnumRegistry) -> bool {
         if rule.condition_expressions.is_empty() {
             return true; // No conditions = always match
         }
-        self.evaluator.evaluate(&rule.condition_expressions, facts)
+        self.evaluator
+            .evaluate(&rule.condition_expressions, facts, enums)
     }
 }
 
@@ -142,6 +151,7 @@ pub fn process_rules_system(
     registry: Res<LayeredRuleRegistry>,
     mut pending_events: ResMut<PendingFactEvents>,
     condition_evaluator: Res<ConditionEvaluator>,
+    enum_registry: Res<EnumRegistry>,
 ) {
     let events_to_process: Vec<FactEvent> = events.read().cloned().collect();
 
@@ -153,6 +163,7 @@ pub fn process_rules_system(
             &mut layered_db,
             &mut pending_events,
             &condition_evaluator,
+            &enum_registry,
         );
     }
 }
@@ -164,10 +175,11 @@ fn process_event_rules(
     layered_db: &mut LayeredFactDatabase,
     pending_events: &mut PendingFactEvents,
     condition_evaluator: &ConditionEvaluator,
+    enum_registry: &EnumRegistry,
 ) {
     'outer: for group in rule_groups {
         for rule in group {
-            if !condition_evaluator.evaluate(rule, layered_db) {
+            if !condition_evaluator.evaluate(rule, layered_db, enum_registry) {
                 trace!("FRE: Rule '{}' skipped - conditions not met", rule.id);
                 continue;
             }

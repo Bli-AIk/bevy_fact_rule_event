@@ -40,11 +40,11 @@ mod rule;
 mod systems;
 
 pub use asset::{
-    ActionEventKind, ActionHandlerRegistry, FactModificationDef, FactValueDef, FreAsset,
-    FreAssetLoader, LocalFactValue, RuleActionDef, RuleDef, RuleEventDef, RuleScopeDef,
+    ActionEventKind, ActionHandlerRegistry, EnumRegistry, FactModificationDef, FactValueDef,
+    FreAsset, FreAssetLoader, LocalFactValue, RuleActionDef, RuleDef, RuleEventDef, RuleScopeDef,
 };
 
-pub use database::{FactDatabase, FactKey, FactReader, FactValue};
+pub use database::{CombinedFactReader, FactDatabase, FactReader, FactValue};
 pub use event::{FactEvent, FactEventId};
 pub use layered::LayeredFactDatabase;
 pub use rule::{FactModification, LayeredRuleRegistry, Rule, RuleRegistry, RuleScope};
@@ -68,6 +68,7 @@ impl Plugin for FREPlugin {
         app.init_resource::<LayeredFactDatabase>()
             .init_resource::<LayeredRuleRegistry>()
             .init_resource::<ActionHandlerRegistry>()
+            .init_resource::<EnumRegistry>()
             .init_resource::<PendingFactEvents>()
             .init_resource::<ConditionEvaluator>()
             .init_asset::<FreAsset>()

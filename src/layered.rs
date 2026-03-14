@@ -16,7 +16,7 @@
 //! - **全局层**: 跨游戏状态的持久数据（如玩家名称、存档进度）
 //! - **局部层**: 当前上下文的临时数据（如战斗回合数、房间状态）
 
-use crate::database::{FactDatabase, FactKey, FactReader, FactValue};
+use crate::database::{FactDatabase, FactReader, FactValue};
 use bevy::prelude::*;
 
 /// Layered fact database with global and local scopes.
@@ -68,13 +68,6 @@ impl LayeredFactDatabase {
     /// Get a fact value, checking local layer first, then global.
     ///
     /// 获取事实值，首先检查局部层，然后检查全局层。
-    pub fn get(&self, key: &FactKey) -> Option<&FactValue> {
-        self.local.get(key).or_else(|| self.global.get(key))
-    }
-
-    /// Get a fact value by string key.
-    ///
-    /// 通过字符串键获取事实值。
     pub fn get_by_str(&self, key: &str) -> Option<&FactValue> {
         self.local
             .get_by_str(key)
@@ -148,7 +141,7 @@ impl LayeredFactDatabase {
     /// Set a fact value in the local layer (default write target).
     ///
     /// 在局部层设置事实值（默认写入目标）。
-    pub fn set(&mut self, key: impl Into<FactKey>, value: impl Into<FactValue>) {
+    pub fn set(&mut self, key: impl Into<String>, value: impl Into<FactValue>) {
         self.local.set(key, value);
     }
 
@@ -157,14 +150,14 @@ impl LayeredFactDatabase {
     ///
     /// 仅当值与当前值不同时才在局部层设置。
     /// 如果值被更改返回 true，否则返回 false。
-    pub fn set_if_changed(&mut self, key: impl Into<FactKey>, value: impl Into<FactValue>) -> bool {
+    pub fn set_if_changed(&mut self, key: impl Into<String>, value: impl Into<FactValue>) -> bool {
         self.local.set_if_changed(key, value)
     }
 
     /// Alias for `set` - explicitly writes to local layer.
     ///
     /// `set` 的别名 - 显式写入局部层。
-    pub fn set_local(&mut self, key: impl Into<FactKey>, value: impl Into<FactValue>) {
+    pub fn set_local(&mut self, key: impl Into<String>, value: impl Into<FactValue>) {
         self.local.set(key, value);
     }
 
@@ -173,7 +166,7 @@ impl LayeredFactDatabase {
     ///
     /// 在全局层设置事实值。
     /// 谨慎使用 - 仅用于必须跨状态转换持久化的数据。
-    pub fn set_global(&mut self, key: impl Into<FactKey>, value: impl Into<FactValue>) {
+    pub fn set_global(&mut self, key: impl Into<String>, value: impl Into<FactValue>) {
         self.global.set(key, value);
     }
 
@@ -184,7 +177,7 @@ impl LayeredFactDatabase {
     /// 如果值被更改返回 true，否则返回 false。
     pub fn set_global_if_changed(
         &mut self,
-        key: impl Into<FactKey>,
+        key: impl Into<String>,
         value: impl Into<FactValue>,
     ) -> bool {
         self.global.set_if_changed(key, value)
@@ -487,14 +480,14 @@ impl LayeredFactDatabase {
     /// Iterate over facts in the local layer.
     ///
     /// 迭代局部层中的事实。
-    pub fn iter_local(&self) -> impl Iterator<Item = (&FactKey, &FactValue)> {
+    pub fn iter_local(&self) -> impl Iterator<Item = (&String, &FactValue)> {
         self.local.iter()
     }
 
     /// Iterate over facts in the global layer.
     ///
     /// 迭代全局层中的事实。
-    pub fn iter_global(&self) -> impl Iterator<Item = (&FactKey, &FactValue)> {
+    pub fn iter_global(&self) -> impl Iterator<Item = (&String, &FactValue)> {
         self.global.iter()
     }
 
@@ -507,10 +500,6 @@ impl LayeredFactDatabase {
 }
 
 impl FactReader for LayeredFactDatabase {
-    fn get(&self, key: &FactKey) -> Option<&FactValue> {
-        self.local.get(key).or_else(|| self.global.get(key))
-    }
-
     fn get_by_str(&self, key: &str) -> Option<&FactValue> {
         self.local
             .get_by_str(key)
@@ -714,13 +703,12 @@ mod tests {
     }
 
     #[test]
-    fn test_get_by_fact_key() {
+    fn test_get_by_str_key() {
         let mut db = LayeredFactDatabase::new();
 
         db.set_local("test_key", 42i64);
-        let key = FactKey::new("test_key");
 
-        assert_eq!(db.get(&key), Some(&FactValue::Int(42)));
+        assert_eq!(db.get_by_str("test_key"), Some(&FactValue::Int(42)));
     }
 
     #[test]

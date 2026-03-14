@@ -35,6 +35,12 @@ pub enum FactValueDef {
     /// List of integers - useful for HP values, stats arrays, etc.
     /// 整数列表 - 适用于 HP 值、属性数组等。
     IntList(Vec<i64>),
+    /// Enum variant — resolved to Int at load time via EnumRegistry.
+    /// In RON: `Enum("main")`, at runtime equivalent to `Int(0)`.
+    ///
+    /// 枚举变体 — 加载时通过 EnumRegistry 解析为 Int。
+    /// RON 中写作 `Enum("main")`，运行时等价于 `Int(0)`。
+    Enum(String),
 }
 
 impl From<FactValueDef> for FactValue {
@@ -46,6 +52,15 @@ impl From<FactValueDef> for FactValue {
             FactValueDef::String(v) => FactValue::String(v),
             FactValueDef::StringList(v) => FactValue::StringList(v),
             FactValueDef::IntList(v) => FactValue::IntList(v),
+            FactValueDef::Enum(variant) => {
+                // Enum without registry resolution — store as String fallback.
+                // Callers should use EnumRegistry::resolve_fact_value_def() instead.
+                warn!(
+                    "FactValueDef::Enum('{}') converted without EnumRegistry — stored as String",
+                    variant
+                );
+                FactValue::String(variant)
+            }
         }
     }
 }
@@ -197,6 +212,11 @@ impl RuleEventDef {
     }
 }
 
+/// Serde helper: returns `true` for default boolean fields.
+fn default_true() -> bool {
+    true
+}
+
 /// Serializable action definition for RON files.
 /// Actions are limited to what can be expressed in data (no closures).
 ///
@@ -243,6 +263,30 @@ pub enum RuleActionDef {
     /// 发出 FRE 事件（用于规则链）。
     EmitEvent(String),
 
+    /// Start a dialogue — encapsulates setting 4-6 dialogue:* facts.
+    /// Replaces boilerplate of manually setting dialogue:pending_mortar_path,
+    /// dialogue:pending_mortar_node, dialogue:pending_start, etc.
+    ///
+    /// 启动对话 — 封装设置 4-6 个 dialogue:* facts 的样板代码。
+    StartDialogue {
+        /// Path to the Mortar script file (e.g., "dialogue/enemies/dummy.mortar").
+        mortar: String,
+        /// Node name within the Mortar script (e.g., "check").
+        node: String,
+        /// Optional view layout path to spawn alongside the dialogue.
+        #[serde(default)]
+        view: Option<String>,
+        /// Whether to use typewriter text effect (default: true).
+        #[serde(default = "default_true")]
+        typewriter: bool,
+        /// Whether the dialogue captures input focus (default: true).
+        #[serde(default = "default_true")]
+        focus: bool,
+        /// Optional voice sound path.
+        #[serde(default)]
+        voice: Option<String>,
+    },
+
     /// Custom action identified by name (handled by game code).
     Custom {
         action_type: String,
@@ -271,6 +315,10 @@ pub enum LocalFactValue {
     /// 表达式支持：$name（局部 fact）、fact('name')（全局 fact）、
     /// 算术运算（+、-、*、/）、比较运算（==、!=、<、>、<=、>=）。
     Expr(String),
+    /// Enum variant — resolved to Int at load time via EnumRegistry.
+    ///
+    /// 枚举变体 — 加载时通过 EnumRegistry 解析为 Int。
+    Enum(String),
 }
 
 // ============================================================================
@@ -374,6 +422,7 @@ impl RuleDef {
             enabled: self.enabled,
             priority: self.priority,
             consume_event: self.consume_event,
+            actions: self.actions.clone(),
         }
     }
 
@@ -411,6 +460,14 @@ pub struct FreAsset {
     /// 如未指定，默认为 Local。
     #[serde(default)]
     pub scope: RuleScopeDef,
+
+    /// Enum definitions — maps group names to ordered variant lists.
+    /// Example: `{ "depth": ["main", "submenu", "options"] }` → main=0, submenu=1, options=2
+    ///
+    /// 枚举定义 — 将组名映射到有序变体列表。
+    /// 示例：`{ "depth": ["main", "submenu", "options"] }` → main=0, submenu=1, options=2
+    #[serde(default)]
+    pub enums: HashMap<String, Vec<String>>,
 
     /// Facts to set when this asset is loaded.
     /// 加载此资产时设置的事实。
@@ -494,11 +551,122 @@ impl FreAsset {
         &self.facts
     }
 
+    /// Resolve all facts, converting Enum variants to Int using the asset's own enums field.
+    /// Returns resolved (key, FactValue) pairs.
+    ///
+    /// 解析所有 facts，使用资产自身的 enums 字段将 Enum 变体转换为 Int。
+    pub fn resolve_facts(&self, registry: &EnumRegistry) -> HashMap<String, FactValue> {
+        self.facts
+            .iter()
+            .map(|(key, def)| {
+                let value = registry.resolve_fact_value_def(key, def);
+                (key.clone(), value)
+            })
+            .collect()
+    }
+
     /// Get the rule definitions for custom action handling.
     ///
     /// 获取用于自定义动作处理的规则定义。
     pub fn get_rule_defs(&self) -> &[RuleDef] {
         &self.rules
+    }
+
+    /// Get the enum definitions.
+    ///
+    /// 获取枚举定义。
+    pub fn get_enums(&self) -> &HashMap<String, Vec<String>> {
+        &self.enums
+    }
+}
+
+// ============================================================================
+// Enum Registry
+// ============================================================================
+
+/// Global registry for enum mappings.
+/// Maps enum group names to variant name ↔ integer ID mappings.
+///
+/// 全局枚举注册表。
+/// 将枚举组名映射到变体名 ↔ 整数 ID 映射。
+///
+/// # Example
+/// ```ignore
+/// // RON: enums: { "depth": ["main", "submenu", "options"] }
+/// // → "main" = 0, "submenu" = 1, "options" = 2
+/// registry.register("depth", &["main".into(), "submenu".into(), "options".into()]);
+/// assert_eq!(registry.resolve("depth", "submenu"), Some(1));
+/// ```
+#[derive(Resource, Default, Debug, Clone)]
+pub struct EnumRegistry {
+    /// enum_group_name → { variant_name → integer_id }
+    mappings: HashMap<String, HashMap<String, i64>>,
+    /// enum_group_name → { integer_id → variant_name } (reverse mapping, for debug)
+    reverse: HashMap<String, HashMap<i64, String>>,
+}
+
+impl EnumRegistry {
+    /// Register a set of enum definitions from a FreAsset.
+    ///
+    /// 从 FreAsset 注册一组枚举定义。
+    pub fn register_from_asset(&mut self, asset: &FreAsset) {
+        for (group, variants) in &asset.enums {
+            self.register(group, variants);
+        }
+    }
+
+    /// Register enum variants for a group. Later registrations for the same group are merged.
+    ///
+    /// 为枚举组注册变体。同一组的后续注册会合并。
+    pub fn register(&mut self, group: &str, variants: &[String]) {
+        let forward: HashMap<String, i64> = variants
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (v.clone(), i as i64))
+            .collect();
+        let backward: HashMap<i64, String> = variants
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (i as i64, v.clone()))
+            .collect();
+        self.mappings.insert(group.to_string(), forward);
+        self.reverse.insert(group.to_string(), backward);
+    }
+
+    /// Resolve an enum variant to its integer ID.
+    ///
+    /// 解析枚举变体为整数 ID。
+    pub fn resolve(&self, group: &str, variant: &str) -> Option<i64> {
+        self.mappings.get(group)?.get(variant).copied()
+    }
+
+    /// Reverse-resolve an integer ID to its variant name (for debug display).
+    ///
+    /// 将整数 ID 反向解析为变体名（用于调试显示）。
+    pub fn reverse_resolve(&self, group: &str, id: i64) -> Option<&str> {
+        self.reverse.get(group)?.get(&id).map(|s| s.as_str())
+    }
+
+    /// Resolve a FactValueDef::Enum to FactValue::Int using this registry.
+    /// Non-Enum variants pass through unchanged.
+    ///
+    /// 使用此注册表将 FactValueDef::Enum 解析为 FactValue::Int。
+    /// 非 Enum 变体原样传递。
+    pub fn resolve_fact_value_def(&self, key: &str, def: &FactValueDef) -> FactValue {
+        match def {
+            FactValueDef::Enum(variant) => {
+                if let Some(id) = self.resolve(key, variant) {
+                    FactValue::Int(id)
+                } else {
+                    warn!(
+                        "Unknown enum variant '{}' for group '{}', storing as String",
+                        variant, key
+                    );
+                    FactValue::String(variant.clone())
+                }
+            }
+            other => other.clone().into(),
+        }
     }
 }
 
@@ -592,6 +760,7 @@ impl ActionHandlerRegistry {
             RuleActionDef::CloseView => "CloseView",
             RuleActionDef::SwitchState(_) => "SwitchState",
             RuleActionDef::EmitEvent(_) => "EmitEvent",
+            RuleActionDef::StartDialogue { .. } => "StartDialogue",
             RuleActionDef::Custom { action_type, .. } => action_type.as_str(),
         };
 
@@ -730,6 +899,7 @@ mod tests {
                 SetLocalFact("bool_val", Bool(true)),
                 SetLocalFact("str_val", String("hello")),
                 SetLocalFact("expr_val", Expr("$x + 1")),
+                SetLocalFact("enum_val", Enum("main")),
             ],
         ),
     ],
@@ -737,6 +907,41 @@ mod tests {
 "#;
 
         let asset: FreAsset = ron::from_str(fre_data).unwrap();
-        assert_eq!(asset.rules[0].actions.len(), 5);
+        assert_eq!(asset.rules[0].actions.len(), 6);
+    }
+
+    #[test]
+    fn test_enum_registry_and_resolve_facts() {
+        let fre_data = r#"
+(
+    scope: View,
+    enums: {
+        "depth": ["main", "submenu", "options"],
+        "menu_context": ["fight", "act", "item", "mercy"],
+    },
+    facts: {
+        "depth": Enum("main"),
+        "menu_context": Enum("act"),
+        "selection": Int(0),
+    },
+    rules: [],
+)
+"#;
+
+        let asset: FreAsset = ron::from_str(fre_data).unwrap();
+        assert_eq!(asset.enums.len(), 2);
+        assert_eq!(asset.enums["depth"], vec!["main", "submenu", "options"]);
+
+        let mut registry = EnumRegistry::default();
+        registry.register_from_asset(&asset);
+
+        assert_eq!(registry.resolve("depth", "main"), Some(0));
+        assert_eq!(registry.resolve("depth", "submenu"), Some(1));
+        assert_eq!(registry.resolve("menu_context", "act"), Some(1));
+
+        let resolved = asset.resolve_facts(&registry);
+        assert_eq!(resolved["depth"], FactValue::Int(0));
+        assert_eq!(resolved["menu_context"], FactValue::Int(1));
+        assert_eq!(resolved["selection"], FactValue::Int(0));
     }
 }

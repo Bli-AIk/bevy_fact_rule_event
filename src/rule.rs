@@ -6,6 +6,7 @@
 //! 规则定义 - FRE 的逻辑层。
 //! 规则包含触发器、条件（表达式）、修改和输出。
 
+use crate::asset::RuleActionDef;
 use crate::database::FactValue;
 use crate::event::{FactEvent, FactEventId};
 use crate::expr;
@@ -219,6 +220,15 @@ pub struct Rule {
     /// 如果为 true（默认），将不检查更低优先级组的规则。
     /// 如果为 false，继续检查同一优先级组内的规则。
     pub consume_event: bool,
+
+    /// Actions to execute when this rule fires.
+    /// These are game-specific actions (PlaySound, SetLocalFact, etc.)
+    /// that are processed by the bridge layer.
+    ///
+    /// 当此规则触发时要执行的动作。
+    /// 这些是游戏特定的动作（PlaySound、SetLocalFact 等），
+    /// 由桥接层处理。
+    pub actions: Vec<RuleActionDef>,
 }
 
 impl Rule {
@@ -250,6 +260,7 @@ pub struct RuleBuilder {
     enabled: bool,
     priority: i32,
     consume_event: bool,
+    actions: Vec<RuleActionDef>,
 }
 
 impl RuleBuilder {
@@ -267,6 +278,7 @@ impl RuleBuilder {
             enabled: true,
             priority: 0,
             consume_event: true,
+            actions: Vec::new(),
         }
     }
 
@@ -340,6 +352,7 @@ impl RuleBuilder {
             enabled: self.enabled,
             priority: self.priority,
             consume_event: self.consume_event,
+            actions: self.actions,
         }
     }
 }
