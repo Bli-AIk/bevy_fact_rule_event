@@ -17,6 +17,68 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // ============================================================================
+// ActionDef Trait & CoreActionDef
+// ============================================================================
+
+/// Trait for game-specific action definitions.
+/// FRE crate is generic over this — consumers define their own action enum.
+///
+/// 游戏特定动作定义的 trait。
+/// FRE crate 对此进行泛型化 — 消费者定义自己的动作枚举。
+pub trait ActionDef:
+    std::fmt::Debug
+    + Clone
+    + Send
+    + Sync
+    + Serialize
+    + serde::de::DeserializeOwned
+    + bevy::reflect::TypePath
+    + 'static
+{
+    /// Returns a string identifier for this action type (for handler dispatch).
+    ///
+    /// 返回此动作类型的字符串标识符（用于处理程序分发）。
+    fn action_type(&self) -> &str;
+}
+
+/// Built-in minimal action definitions provided by the FRE crate.
+/// Games can use this directly or define their own enum implementing `ActionDef`.
+///
+/// FRE crate 提供的内置最小动作定义。
+/// 游戏可以直接使用此类型，也可以定义自己的枚举实现 `ActionDef`。
+#[derive(Debug, Clone, Serialize, Deserialize, bevy::reflect::TypePath)]
+pub enum CoreActionDef {
+    /// Log a message (for debugging).
+    Log { message: String },
+    /// Set a local fact on the active ViewRoot.
+    /// Value can be a literal or an expression (e.g., "$selection - 1").
+    ///
+    /// 在活跃的 ViewRoot 上设置局部 fact。
+    /// 值可以是字面量或表达式（例如 "$selection - 1"）。
+    SetLocalFact(String, LocalFactValue),
+    /// Emit an FRE event (for chaining rules).
+    ///
+    /// 发出 FRE 事件（用于规则链）。
+    EmitEvent(String),
+    /// Custom action identified by name (handled by game code).
+    Custom {
+        action_type: String,
+        params: HashMap<String, String>,
+    },
+}
+
+impl ActionDef for CoreActionDef {
+    fn action_type(&self) -> &str {
+        match self {
+            CoreActionDef::Log { .. } => "Log",
+            CoreActionDef::SetLocalFact(_, _) => "SetLocalFact",
+            CoreActionDef::EmitEvent(_) => "EmitEvent",
+            CoreActionDef::Custom { action_type, .. } => action_type.as_str(),
+        }
+    }
+}
+
+// ============================================================================
 // Serializable Value Types
 // ============================================================================
 
@@ -213,85 +275,9 @@ impl RuleEventDef {
 }
 
 /// Serde helper: returns `true` for default boolean fields.
+#[allow(dead_code)]
 fn default_true() -> bool {
     true
-}
-
-/// Serializable action definition for RON files.
-/// Actions are limited to what can be expressed in data (no closures).
-///
-/// RON 文件的可序列化动作定义。
-/// 动作限于可用数据表达的内容（无闭包）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RuleActionDef {
-    /// Log a message (for debugging).
-    Log { message: String },
-
-    /// Play a sound effect using fuzzy search.
-    /// Uses audio::play_sound() which searches in the audios directory.
-    ///
-    /// 使用模糊搜索播放音效。
-    /// 使用 audio::play_sound()，在 audios 目录中搜索。
-    PlaySound(String),
-
-    /// Play a sound effect using full path.
-    /// Uses audio::play_sound_full_path() without adding prefixes.
-    ///
-    /// 使用完整路径播放音效。
-    /// 使用 audio::play_sound_full_path()，不添加前缀。
-    PlaySoundFullPath(String),
-
-    /// Set a local fact on the active ViewRoot.
-    /// Value can be a literal or an expression (e.g., "$selection - 1").
-    ///
-    /// 在活跃的 ViewRoot 上设置局部 fact。
-    /// 值可以是字面量或表达式（例如 "$selection - 1"）。
-    SetLocalFact(String, LocalFactValue),
-
-    /// Close the active View.
-    ///
-    /// 关闭活跃的 View。
-    CloseView,
-
-    /// Switch to a specified state (e.g., "Normal", "Battle").
-    ///
-    /// 切换到指定状态（例如 "Normal", "Battle"）。
-    SwitchState(String),
-
-    /// Emit an FRE event (for chaining rules).
-    ///
-    /// 发出 FRE 事件（用于规则链）。
-    EmitEvent(String),
-
-    /// Start a dialogue — encapsulates setting 4-6 dialogue:* facts.
-    /// Replaces boilerplate of manually setting dialogue:pending_mortar_path,
-    /// dialogue:pending_mortar_node, dialogue:pending_start, etc.
-    ///
-    /// 启动对话 — 封装设置 4-6 个 dialogue:* facts 的样板代码。
-    StartDialogue {
-        /// Path to the Mortar script file (e.g., "dialogue/enemies/dummy.mortar").
-        mortar: String,
-        /// Node name within the Mortar script (e.g., "check").
-        node: String,
-        /// Optional view layout path to spawn alongside the dialogue.
-        #[serde(default)]
-        view: Option<String>,
-        /// Whether to use typewriter text effect (default: true).
-        #[serde(default = "default_true")]
-        typewriter: bool,
-        /// Whether the dialogue captures input focus (default: true).
-        #[serde(default = "default_true")]
-        focus: bool,
-        /// Optional voice sound path.
-        #[serde(default)]
-        voice: Option<String>,
-    },
-
-    /// Custom action identified by name (handled by game code).
-    Custom {
-        action_type: String,
-        params: HashMap<String, String>,
-    },
 }
 
 /// Value for SetLocalFact action - can be literal or expression.
@@ -329,7 +315,8 @@ pub enum LocalFactValue {
 ///
 /// 可从 RON 加载的单个规则定义。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RuleDef {
+#[serde(bound = "")]
+pub struct RuleDef<A: ActionDef = CoreActionDef> {
     /// Unique identifier for this rule (optional, auto-generated if not provided).
     #[serde(default)]
     pub id: String,
@@ -353,7 +340,7 @@ pub struct RuleDef {
 
     /// Actions to execute (data-driven, handled by game code).
     #[serde(default)]
-    pub actions: Vec<RuleActionDef>,
+    pub actions: Vec<A>,
 
     /// Modifications to apply to the fact database.
     #[serde(default)]
@@ -388,11 +375,11 @@ fn default_consume_event() -> bool {
     true
 }
 
-impl RuleDef {
+impl<A: ActionDef> RuleDef<A> {
     /// Convert to a runtime Rule (without actions, which need game-specific handling).
     ///
     /// 转换为运行时 Rule（不含动作，动作需要游戏特定处理）。
-    pub fn to_rule(&self) -> Rule {
+    pub fn to_rule(&self) -> Rule<A> {
         self.to_rule_with_index(0, RuleScope::default())
     }
 
@@ -400,7 +387,7 @@ impl RuleDef {
     /// and a scope inherited from the parent FreAsset.
     ///
     /// 转换为运行时 Rule，使用索引后缀生成唯一 ID 和从父 FreAsset 继承的作用域。
-    pub fn to_rule_with_index(&self, index: usize, scope: RuleScope) -> Rule {
+    pub fn to_rule_with_index(&self, index: usize, scope: RuleScope) -> Rule<A> {
         // Generate ID if not provided, with index suffix for uniqueness
         let id = if self.id.is_empty() {
             format!(
@@ -451,8 +438,9 @@ impl RuleDef {
 ///
 /// 可从 RON 文件加载的事实和规则集合。
 /// 这是统一的 FRE 数据资产格式 - 纯数据，无类型标识。
-#[derive(Asset, TypePath, Debug, Clone, Serialize, Deserialize)]
-pub struct FreAsset {
+#[derive(Asset, bevy::reflect::TypePath, Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct FreAsset<A: ActionDef = CoreActionDef> {
     /// Scope for all rules in this asset.
     /// Defaults to Local if not specified.
     ///
@@ -477,7 +465,7 @@ pub struct FreAsset {
     /// The rules defined in this set.
     /// 此集合中定义的规则。
     #[serde(default)]
-    pub rules: Vec<RuleDef>,
+    pub rules: Vec<RuleDef<A>>,
 }
 
 /// Serializable rule scope for RON files.
@@ -504,7 +492,7 @@ impl From<RuleScopeDef> for RuleScope {
     }
 }
 
-impl FreAsset {
+impl<A: ActionDef> FreAsset<A> {
     /// Get the scope for rules in this asset.
     ///
     /// 获取此资产中规则的作用域。
@@ -515,7 +503,7 @@ impl FreAsset {
     /// Register all rules from this asset into a basic RuleRegistry.
     ///
     /// 将此资产中的所有规则注册到基础 RuleRegistry。
-    pub fn register_rules(&self, registry: &mut RuleRegistry) {
+    pub fn register_rules(&self, registry: &mut RuleRegistry<A>) {
         let scope = self.scope();
         for (idx, rule_def) in self.rules.iter().enumerate() {
             let rule = rule_def.to_rule_with_index(idx, scope);
@@ -532,7 +520,7 @@ impl FreAsset {
     ///
     /// 将此资产中的所有规则注册到 LayeredRuleRegistry。
     /// 规则会根据其作用域自动放置到正确的层。
-    pub fn register_rules_layered(&self, registry: &mut crate::rule::LayeredRuleRegistry) {
+    pub fn register_rules_layered(&self, registry: &mut crate::rule::LayeredRuleRegistry<A>) {
         let scope = self.scope();
         for (idx, rule_def) in self.rules.iter().enumerate() {
             let rule = rule_def.to_rule_with_index(idx, scope);
@@ -568,7 +556,7 @@ impl FreAsset {
     /// Get the rule definitions for custom action handling.
     ///
     /// 获取用于自定义动作处理的规则定义。
-    pub fn get_rule_defs(&self) -> &[RuleDef] {
+    pub fn get_rule_defs(&self) -> &[RuleDef<A>] {
         &self.rules
     }
 
@@ -609,7 +597,7 @@ impl EnumRegistry {
     /// Register a set of enum definitions from a FreAsset.
     ///
     /// 从 FreAsset 注册一组枚举定义。
-    pub fn register_from_asset(&mut self, asset: &FreAsset) {
+    pub fn register_from_asset<A: ActionDef>(&mut self, asset: &FreAsset<A>) {
         for (group, variants) in &asset.enums {
             self.register(group, variants);
         }
@@ -677,11 +665,28 @@ impl EnumRegistry {
 /// Asset loader for .fre.ron files.
 ///
 /// .fre.ron 文件的资产加载器。
-#[derive(Default, bevy::reflect::TypePath)]
-pub struct FreAssetLoader;
+pub struct FreAssetLoader<A: ActionDef = CoreActionDef>(std::marker::PhantomData<A>);
 
-impl AssetLoader for FreAssetLoader {
-    type Asset = FreAsset;
+impl<A: ActionDef> Default for FreAssetLoader<A> {
+    fn default() -> Self {
+        Self(std::marker::PhantomData)
+    }
+}
+
+// TypePath is required by Bevy's AssetLoader machinery.
+impl<A: ActionDef> bevy::reflect::TypePath for FreAssetLoader<A> {
+    fn type_path() -> &'static str {
+        // Use a static path; concrete type info comes from the generic parameter's TypePath.
+        "bevy_fact_rule_event::asset::FreAssetLoader"
+    }
+
+    fn short_type_path() -> &'static str {
+        "FreAssetLoader"
+    }
+}
+
+impl<A: ActionDef> AssetLoader for FreAssetLoader<A> {
+    type Asset = FreAsset<A>;
     type Settings = ();
     type Error = anyhow::Error;
 
@@ -694,7 +699,7 @@ impl AssetLoader for FreAssetLoader {
         Box::pin(async move {
             let mut bytes = Vec::new();
             reader.read_to_end(&mut bytes).await?;
-            let asset = ron::de::from_bytes::<FreAsset>(&bytes)?;
+            let asset = ron::de::from_bytes::<FreAsset<A>>(&bytes)?;
             Ok(asset)
         })
     }
@@ -711,26 +716,39 @@ impl AssetLoader for FreAssetLoader {
 /// Type alias for action handler functions.
 ///
 /// 动作处理函数的类型别名。
-pub type ActionHandler =
-    Box<dyn Fn(&RuleActionDef, &crate::LayeredFactDatabase, &mut Commands) + Send + Sync>;
+pub type ActionHandler<A> =
+    Box<dyn Fn(&A, &crate::LayeredFactDatabase, &mut Commands) + Send + Sync>;
 
 /// Registry for custom action handlers.
 /// Games can register handlers for specific action types.
 ///
 /// 自定义动作处理程序的注册表。
 /// 游戏可以为特定动作类型注册处理程序。
-#[derive(Resource, Default)]
-pub struct ActionHandlerRegistry {
-    handlers: HashMap<String, ActionHandler>,
+pub struct ActionHandlerRegistry<A: ActionDef = CoreActionDef> {
+    handlers: HashMap<String, ActionHandler<A>>,
 }
 
-impl ActionHandlerRegistry {
+impl<A: ActionDef> Default for ActionHandlerRegistry<A> {
+    fn default() -> Self {
+        Self {
+            handlers: HashMap::new(),
+        }
+    }
+}
+
+// Manual Resource impl to avoid requiring A: Default.
+unsafe impl<A: ActionDef> Send for ActionHandlerRegistry<A> {}
+unsafe impl<A: ActionDef> Sync for ActionHandlerRegistry<A> {}
+
+impl<A: ActionDef> Resource for ActionHandlerRegistry<A> {}
+
+impl<A: ActionDef> ActionHandlerRegistry<A> {
     /// Register a handler for a specific action type.
     ///
     /// 为特定动作类型注册处理程序。
     pub fn register<F>(&mut self, action_type: &str, handler: F)
     where
-        F: Fn(&RuleActionDef, &crate::LayeredFactDatabase, &mut Commands) + Send + Sync + 'static,
+        F: Fn(&A, &crate::LayeredFactDatabase, &mut Commands) + Send + Sync + 'static,
     {
         self.handlers
             .insert(action_type.to_string(), Box::new(handler));
@@ -744,45 +762,20 @@ impl ActionHandlerRegistry {
     }
 
     /// Execute an action using the registered handler.
+    /// Uses `action.action_type()` for handler dispatch.
     ///
     /// 使用注册的处理程序执行动作。
-    pub fn execute(
-        &self,
-        action: &RuleActionDef,
-        db: &crate::LayeredFactDatabase,
-        commands: &mut Commands,
-    ) {
-        let action_type = match action {
-            RuleActionDef::Log { .. } => "Log",
-            RuleActionDef::PlaySound(_) => "PlaySound",
-            RuleActionDef::PlaySoundFullPath(_) => "PlaySoundFullPath",
-            RuleActionDef::SetLocalFact(_, _) => "SetLocalFact",
-            RuleActionDef::CloseView => "CloseView",
-            RuleActionDef::SwitchState(_) => "SwitchState",
-            RuleActionDef::EmitEvent(_) => "EmitEvent",
-            RuleActionDef::StartDialogue { .. } => "StartDialogue",
-            RuleActionDef::Custom { action_type, .. } => action_type.as_str(),
-        };
+    /// 使用 `action.action_type()` 进行处理程序分发。
+    pub fn execute(&self, action: &A, db: &crate::LayeredFactDatabase, commands: &mut Commands) {
+        let action_type = action.action_type();
 
         if let Some(handler) = self.handlers.get(action_type) {
             handler(action, db, commands);
         } else {
-            // Built-in handlers
-            match action {
-                RuleActionDef::Log { message } => {
-                    info!("FRE Action Log: {}", message);
-                }
-                RuleActionDef::EmitEvent(event_id) => {
-                    // EmitEvent is handled by the systems via outputs, log for debugging
-                    debug!("FRE Action EmitEvent: {}", event_id);
-                }
-                _ => {
-                    warn!(
-                        "FRE: No handler registered for action type '{}'",
-                        action_type
-                    );
-                }
-            }
+            warn!(
+                "FRE: No handler registered for action type '{}'",
+                action_type
+            );
         }
     }
 }
@@ -826,7 +819,7 @@ mod tests {
 
     #[test]
     fn test_fre_asset_action_event_format() {
-        // Test FRE format with ActionEvent
+        // Test FRE format with ActionEvent and CoreActionDef actions
         let fre_data = r#"
 (
     rules: [
@@ -835,7 +828,7 @@ mod tests {
             conditions: ["$selection > 0"],
             actions: [
                 SetLocalFact("selection", Expr("$selection - 1")),
-                PlaySound("choice"),
+                Log(message: "moved up"),
             ],
         ),
         (
@@ -843,7 +836,7 @@ mod tests {
             conditions: ["$depth == 0"],
             actions: [
                 SetLocalFact("depth", Int(1)),
-                PlaySoundFullPath("assets/audios/sfx/confirm.wav"),
+                EmitEvent("confirmed"),
             ],
         ),
     ],
@@ -943,5 +936,32 @@ mod tests {
         assert_eq!(resolved["depth"], FactValue::Int(0));
         assert_eq!(resolved["menu_context"], FactValue::Int(1));
         assert_eq!(resolved["selection"], FactValue::Int(0));
+    }
+
+    #[test]
+    fn test_fre_asset_with_actions_and_conditions() {
+        let fre_data = r#"
+(
+    rules: [
+        (
+            id: "test_actions",
+            event: Event("do_stuff"),
+            conditions: ["$counter > 0"],
+            actions: [
+                Log(message: "test"),
+                SetLocalFact("depth", Int(1)),
+                EmitEvent("test_event"),
+            ],
+        ),
+    ],
+)
+"#;
+
+        let asset: FreAsset = ron::from_str(fre_data).unwrap();
+        assert_eq!(asset.rules.len(), 1);
+        assert_eq!(asset.rules[0].actions.len(), 3);
+        assert_eq!(asset.rules[0].actions[0].action_type(), "Log");
+        assert_eq!(asset.rules[0].actions[1].action_type(), "SetLocalFact");
+        assert_eq!(asset.rules[0].actions[2].action_type(), "EmitEvent");
     }
 }

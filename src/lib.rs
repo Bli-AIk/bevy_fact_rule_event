@@ -40,8 +40,9 @@ mod rule;
 mod systems;
 
 pub use asset::{
-    ActionEventKind, ActionHandlerRegistry, EnumRegistry, FactModificationDef, FactValueDef,
-    FreAsset, FreAssetLoader, LocalFactValue, RuleActionDef, RuleDef, RuleEventDef, RuleScopeDef,
+    ActionDef, ActionEventKind, ActionHandlerRegistry, CoreActionDef, EnumRegistry,
+    FactModificationDef, FactValueDef, FreAsset, FreAssetLoader, LocalFactValue, RuleDef,
+    RuleEventDef, RuleScopeDef,
 };
 
 pub use database::{CombinedFactReader, FactDatabase, FactReader, FactValue};
@@ -57,28 +58,37 @@ use bevy::prelude::*;
 /// Main plugin for the FRE system.
 ///
 /// FRE 系统的主插件。
-#[derive(Default)]
-pub struct FREPlugin {
+pub struct FREPlugin<A: ActionDef = CoreActionDef> {
     pub schedule: Option<InternedScheduleLabel>,
+    _marker: std::marker::PhantomData<A>,
 }
 
-impl Plugin for FREPlugin {
+impl<A: ActionDef> Default for FREPlugin<A> {
+    fn default() -> Self {
+        Self {
+            schedule: None,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<A: ActionDef> Plugin for FREPlugin<A> {
     fn build(&self, app: &mut App) {
         let schedule = self.schedule.unwrap_or(Update.intern());
         app.init_resource::<LayeredFactDatabase>()
-            .init_resource::<LayeredRuleRegistry>()
-            .init_resource::<ActionHandlerRegistry>()
+            .init_resource::<LayeredRuleRegistry<A>>()
+            .init_resource::<ActionHandlerRegistry<A>>()
             .init_resource::<EnumRegistry>()
             .init_resource::<PendingFactEvents>()
             .init_resource::<ConditionEvaluator>()
-            .init_asset::<FreAsset>()
-            .register_asset_loader(FreAssetLoader)
+            .init_asset::<FreAsset<A>>()
+            .register_asset_loader(FreAssetLoader::<A>::default())
             .add_message::<FactEvent>()
             .add_systems(
                 schedule,
                 (
                     systems::emit_pending_events_system,
-                    systems::process_rules_system.run_if(systems::has_fact_events),
+                    systems::process_rules_system::<A>.run_if(systems::has_fact_events),
                 )
                     .chain(),
             );

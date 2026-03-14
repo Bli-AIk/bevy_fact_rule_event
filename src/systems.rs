@@ -4,7 +4,7 @@
 //!
 //! FRE 循环处理的核心系统。
 
-use crate::asset::EnumRegistry;
+use crate::asset::{ActionDef, EnumRegistry};
 use crate::database::FactReader;
 use crate::event::FactEvent;
 use crate::layered::LayeredFactDatabase;
@@ -117,7 +117,12 @@ impl ConditionEvaluator {
     /// Evaluate conditions for a rule.
     ///
     /// 评估规则的条件。
-    pub fn evaluate(&self, rule: &Rule, facts: &dyn FactReader, enums: &EnumRegistry) -> bool {
+    pub fn evaluate<A: ActionDef>(
+        &self,
+        rule: &Rule<A>,
+        facts: &dyn FactReader,
+        enums: &EnumRegistry,
+    ) -> bool {
         if rule.condition_expressions.is_empty() {
             return true; // No conditions = always match
         }
@@ -145,10 +150,10 @@ impl ConditionEvaluator {
 /// 2. 每组内按条件数量排序（条件少的先匹配）
 /// 3. 当规则匹配并消费事件时，不再检查更多规则
 /// 4. 当规则匹配但不消费事件时，继续检查同一组内的规则
-pub fn process_rules_system(
+pub fn process_rules_system<A: ActionDef>(
     mut events: MessageReader<FactEvent>,
     mut layered_db: ResMut<LayeredFactDatabase>,
-    registry: Res<LayeredRuleRegistry>,
+    registry: Res<LayeredRuleRegistry<A>>,
     mut pending_events: ResMut<PendingFactEvents>,
     condition_evaluator: Res<ConditionEvaluator>,
     enum_registry: Res<EnumRegistry>,
@@ -169,9 +174,9 @@ pub fn process_rules_system(
 }
 
 /// Process a single event against prioritized rule groups.
-fn process_event_rules(
+fn process_event_rules<A: ActionDef>(
     event: &FactEvent,
-    rule_groups: Vec<Vec<&Rule>>,
+    rule_groups: Vec<Vec<&Rule<A>>>,
     layered_db: &mut LayeredFactDatabase,
     pending_events: &mut PendingFactEvents,
     condition_evaluator: &ConditionEvaluator,
@@ -230,12 +235,13 @@ pub fn has_fact_events(events: MessageReader<FactEvent>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::asset::CoreActionDef;
     use crate::database::FactValue;
     use crate::rule::{FactModification, Rule, RuleRegistry};
 
     #[test]
     fn test_rule_registry_matching() {
-        let mut registry = RuleRegistry::new();
+        let mut registry = RuleRegistry::<CoreActionDef>::new();
 
         let rule1 = Rule::builder("rule1", "event_a").build();
 
