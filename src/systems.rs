@@ -4,6 +4,8 @@
 //!
 //! FRE 循环处理的核心系统。
 
+use crate::asset::{ActionDef, EnumRegistry};
+use crate::database::FactReader;
 use crate::event::FactEvent;
 use crate::layered::LayeredFactDatabase;
 use crate::rule::{LayeredRuleRegistry, Rule};
@@ -61,7 +63,8 @@ pub trait ConditionEvaluatorTrait: Send + Sync + 'static {
     ///
     /// 评估规则的所有条件表达式。
     /// 如果所有条件都通过或没有条件，返回 true。
-    fn evaluate(&self, conditions: &[String], facts: &LayeredFactDatabase) -> bool;
+    fn evaluate(&self, conditions: &[String], facts: &dyn FactReader, enums: &EnumRegistry)
+    -> bool;
 }
 
 /// Default condition evaluator that always returns true (matches "Always" behavior).
@@ -71,7 +74,12 @@ pub trait ConditionEvaluatorTrait: Send + Sync + 'static {
 pub struct DefaultConditionEvaluator;
 
 impl ConditionEvaluatorTrait for DefaultConditionEvaluator {
-    fn evaluate(&self, _conditions: &[String], _facts: &LayeredFactDatabase) -> bool {
+    fn evaluate(
+        &self,
+        _conditions: &[String],
+        _facts: &dyn FactReader,
+        _enums: &EnumRegistry,
+    ) -> bool {
         // Default: if no conditions, return true; otherwise also return true (no evaluation)
         // This maintains backward compatibility - rules without conditions always match
         true
@@ -109,11 +117,17 @@ impl ConditionEvaluator {
     /// Evaluate conditions for a rule.
     ///
     /// 评估规则的条件。
-    pub fn evaluate(&self, rule: &Rule, facts: &LayeredFactDatabase) -> bool {
+    pub fn evaluate<A: ActionDef>(
+        &self,
+        rule: &Rule<A>,
+        facts: &dyn FactReader,
+        enums: &EnumRegistry,
+    ) -> bool {
         if rule.condition_expressions.is_empty() {
             return true; // No conditions = always match
         }
-        self.evaluator.evaluate(&rule.condition_expressions, facts)
+        self.evaluator
+            .evaluate(&rule.condition_expressions, facts, enums)
     }
 }
 
@@ -136,12 +150,13 @@ impl ConditionEvaluator {
 /// 2. 每组内按条件数量排序（条件少的先匹配）
 /// 3. 当规则匹配并消费事件时，不再检查更多规则
 /// 4. 当规则匹配但不消费事件时，继续检查同一组内的规则
-pub fn process_rules_system(
+pub fn process_rules_system<A: ActionDef>(
     mut events: MessageReader<FactEvent>,
     mut layered_db: ResMut<LayeredFactDatabase>,
-    registry: Res<LayeredRuleRegistry>,
+    registry: Res<LayeredRuleRegistry<A>>,
     mut pending_events: ResMut<PendingFactEvents>,
     condition_evaluator: Res<ConditionEvaluator>,
+    enum_registry: Res<EnumRegistry>,
 ) {
     let events_to_process: Vec<FactEvent> = events.read().cloned().collect();
 
@@ -153,21 +168,23 @@ pub fn process_rules_system(
             &mut layered_db,
             &mut pending_events,
             &condition_evaluator,
+            &enum_registry,
         );
     }
 }
 
 /// Process a single event against prioritized rule groups.
-fn process_event_rules(
+fn process_event_rules<A: ActionDef>(
     event: &FactEvent,
-    rule_groups: Vec<Vec<&Rule>>,
+    rule_groups: Vec<Vec<&Rule<A>>>,
     layered_db: &mut LayeredFactDatabase,
     pending_events: &mut PendingFactEvents,
     condition_evaluator: &ConditionEvaluator,
+    enum_registry: &EnumRegistry,
 ) {
     'outer: for group in rule_groups {
         for rule in group {
-            if !condition_evaluator.evaluate(rule, layered_db) {
+            if !condition_evaluator.evaluate(rule, layered_db, enum_registry) {
                 trace!("FRE: Rule '{}' skipped - conditions not met", rule.id);
                 continue;
             }
@@ -218,12 +235,13 @@ pub fn has_fact_events(events: MessageReader<FactEvent>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::asset::CoreActionDef;
     use crate::database::FactValue;
     use crate::rule::{FactModification, Rule, RuleRegistry};
 
     #[test]
     fn test_rule_registry_matching() {
-        let mut registry = RuleRegistry::new();
+        let mut registry = RuleRegistry::<CoreActionDef>::new();
 
         let rule1 = Rule::builder("rule1", "event_a").build();
 

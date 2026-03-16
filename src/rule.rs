@@ -6,6 +6,7 @@
 //! 规则定义 - FRE 的逻辑层。
 //! 规则包含触发器、条件（表达式）、修改和输出。
 
+use crate::asset::{ActionDef, CoreActionDef};
 use crate::database::FactValue;
 use crate::event::{FactEvent, FactEventId};
 use crate::expr;
@@ -166,7 +167,7 @@ impl FactModification {
 ///
 /// 包含触发器、条件（表达式）、修改和输出的规则定义。
 #[derive(Clone)]
-pub struct Rule {
+pub struct Rule<A: ActionDef = CoreActionDef> {
     /// Unique identifier for this rule.
     ///
     /// 此规则的唯一标识符。
@@ -219,13 +220,20 @@ pub struct Rule {
     /// 如果为 true（默认），将不检查更低优先级组的规则。
     /// 如果为 false，继续检查同一优先级组内的规则。
     pub consume_event: bool,
+
+    /// Actions to execute when this rule fires.
+    /// These are game-specific actions that are processed by the bridge layer.
+    ///
+    /// 当此规则触发时要执行的动作。
+    /// 这些是由桥接层处理的游戏特定动作。
+    pub actions: Vec<A>,
 }
 
-impl Rule {
+impl<A: ActionDef> Rule<A> {
     /// Create a new rule builder.
     ///
     /// 创建新的规则构建器。
-    pub fn builder(id: impl Into<String>, trigger: impl Into<FactEventId>) -> RuleBuilder {
+    pub fn builder(id: impl Into<String>, trigger: impl Into<FactEventId>) -> RuleBuilder<A> {
         RuleBuilder::new(id, trigger)
     }
 
@@ -240,7 +248,7 @@ impl Rule {
 /// Builder for constructing rules.
 ///
 /// 用于构建规则的构建器。
-pub struct RuleBuilder {
+pub struct RuleBuilder<A: ActionDef = CoreActionDef> {
     id: String,
     scope: RuleScope,
     trigger: FactEventId,
@@ -250,9 +258,10 @@ pub struct RuleBuilder {
     enabled: bool,
     priority: i32,
     consume_event: bool,
+    actions: Vec<A>,
 }
 
-impl RuleBuilder {
+impl<A: ActionDef> RuleBuilder<A> {
     /// Create a new rule builder.
     ///
     /// 创建新的规则构建器。
@@ -267,6 +276,7 @@ impl RuleBuilder {
             enabled: true,
             priority: 0,
             consume_event: true,
+            actions: Vec::new(),
         }
     }
 
@@ -329,7 +339,7 @@ impl RuleBuilder {
     /// Build the rule.
     ///
     /// 构建规则。
-    pub fn build(self) -> Rule {
+    pub fn build(self) -> Rule<A> {
         Rule {
             id: self.id,
             scope: self.scope,
@@ -340,11 +350,12 @@ impl RuleBuilder {
             enabled: self.enabled,
             priority: self.priority,
             consume_event: self.consume_event,
+            actions: self.actions,
         }
     }
 }
 
-fn compare_by_priority(a: &Rule, b: &Rule) -> std::cmp::Ordering {
+fn compare_by_priority<A: ActionDef>(a: &Rule<A>, b: &Rule<A>) -> std::cmp::Ordering {
     b.priority.cmp(&a.priority).then_with(|| {
         a.condition_expressions
             .len()
@@ -355,9 +366,8 @@ fn compare_by_priority(a: &Rule, b: &Rule) -> std::cmp::Ordering {
 /// Registry for storing and managing rules.
 ///
 /// 用于存储和管理规则的注册表。
-#[derive(Resource, Default)]
-pub struct RuleRegistry {
-    rules: HashMap<String, Rule>,
+pub struct RuleRegistry<A: ActionDef = CoreActionDef> {
+    rules: HashMap<String, Rule<A>>,
     /// Rules sorted by priority (cached).
     ///
     /// 按优先级排序的规则（缓存）。
@@ -365,7 +375,20 @@ pub struct RuleRegistry {
     dirty: bool,
 }
 
-impl RuleRegistry {
+impl<A: ActionDef> Default for RuleRegistry<A> {
+    fn default() -> Self {
+        Self {
+            rules: HashMap::new(),
+            sorted_rules: Vec::new(),
+            dirty: false,
+        }
+    }
+}
+
+// Manual Resource impl to avoid requiring A: Default.
+impl<A: ActionDef> Resource for RuleRegistry<A> {}
+
+impl<A: ActionDef> RuleRegistry<A> {
     /// Create a new empty rule registry.
     ///
     /// 创建新的空规则注册表。
@@ -380,7 +403,7 @@ impl RuleRegistry {
     /// Register a new rule.
     ///
     /// 注册新规则。
-    pub fn register(&mut self, rule: Rule) {
+    pub fn register(&mut self, rule: Rule<A>) {
         self.rules.insert(rule.id.clone(), rule);
         self.dirty = true;
     }
@@ -388,7 +411,7 @@ impl RuleRegistry {
     /// Unregister a rule by ID.
     ///
     /// 按 ID 注销规则。
-    pub fn unregister(&mut self, rule_id: &str) -> Option<Rule> {
+    pub fn unregister(&mut self, rule_id: &str) -> Option<Rule<A>> {
         let rule = self.rules.remove(rule_id);
         if rule.is_some() {
             self.dirty = true;
@@ -399,14 +422,14 @@ impl RuleRegistry {
     /// Get a rule by ID.
     ///
     /// 按 ID 获取规则。
-    pub fn get(&self, rule_id: &str) -> Option<&Rule> {
+    pub fn get(&self, rule_id: &str) -> Option<&Rule<A>> {
         self.rules.get(rule_id)
     }
 
     /// Get a mutable reference to a rule by ID.
     ///
     /// 按 ID 获取规则的可变引用。
-    pub fn get_mut(&mut self, rule_id: &str) -> Option<&mut Rule> {
+    pub fn get_mut(&mut self, rule_id: &str) -> Option<&mut Rule<A>> {
         self.rules.get_mut(rule_id)
     }
 
@@ -426,9 +449,9 @@ impl RuleRegistry {
     /// 获取匹配给定事件的所有规则，按优先级分组并按条件数量排序。
     /// 返回从高到低优先级的组。
     /// 在每个组内，规则按条件数量排序（条件少的在前）。
-    pub fn get_matching_rules_grouped(&self, event: &FactEvent) -> Vec<Vec<&Rule>> {
+    pub fn get_matching_rules_grouped(&self, event: &FactEvent) -> Vec<Vec<&Rule<A>>> {
         // Group matching rules by priority
-        let mut groups: BTreeMap<i32, Vec<&Rule>> = BTreeMap::new();
+        let mut groups: BTreeMap<i32, Vec<&Rule<A>>> = BTreeMap::new();
 
         for rule in self.rules.values() {
             if rule.matches_event(event) {
@@ -450,7 +473,7 @@ impl RuleRegistry {
     ///
     /// 获取匹配给定事件的所有规则，按优先级排序。
     /// 已弃用：使用 get_matching_rules_grouped 进行正确的优先级分组。
-    pub fn get_matching_rules(&mut self, event: &FactEvent) -> Vec<&Rule> {
+    pub fn get_matching_rules(&mut self, event: &FactEvent) -> Vec<&Rule<A>> {
         // Rebuild sorted list if dirty
         if self.dirty {
             self.sorted_rules = self.rules.keys().cloned().collect();
@@ -495,7 +518,7 @@ impl RuleRegistry {
     /// Iterate over all rules in the registry.
     ///
     /// 迭代注册表中的所有规则。
-    pub fn iter(&self) -> impl Iterator<Item = &Rule> {
+    pub fn iter(&self) -> impl Iterator<Item = &Rule<A>> {
         self.rules.values()
     }
 }
@@ -505,25 +528,37 @@ impl RuleRegistry {
 ///
 /// 分层规则注册表，管理不同作用域的规则。
 /// 规则按 Global、Local 和 View 层分离，具有不同的生命周期。
-#[derive(Resource, Default)]
-pub struct LayeredRuleRegistry {
+pub struct LayeredRuleRegistry<A: ActionDef = CoreActionDef> {
     /// Global rules - persist for the entire application lifetime.
     ///
     /// 全局规则 - 在整个应用生命周期内持续存在。
-    global: RuleRegistry,
+    global: RuleRegistry<A>,
 
     /// Local rules - scoped to the current scene/state.
     ///
     /// 局部规则 - 限定于当前场景/状态。
-    local: RuleRegistry,
+    local: RuleRegistry<A>,
 
     /// View rules - keyed by View entity, cleared when View is despawned.
     ///
     /// 视图规则 - 按 View 实体键控，View 销毁时清除。
-    view: HashMap<Entity, RuleRegistry>,
+    view: HashMap<Entity, RuleRegistry<A>>,
 }
 
-impl LayeredRuleRegistry {
+impl<A: ActionDef> Default for LayeredRuleRegistry<A> {
+    fn default() -> Self {
+        Self {
+            global: RuleRegistry::default(),
+            local: RuleRegistry::default(),
+            view: HashMap::new(),
+        }
+    }
+}
+
+// Manual Resource impl to avoid requiring A: Default.
+impl<A: ActionDef> Resource for LayeredRuleRegistry<A> {}
+
+impl<A: ActionDef> LayeredRuleRegistry<A> {
     /// Create a new empty layered rule registry.
     ///
     /// 创建新的空分层规则注册表。
@@ -536,7 +571,7 @@ impl LayeredRuleRegistry {
     ///
     /// 根据作用域将规则注册到相应层。
     /// 注意：View 作用域的规则必须使用 `register_view_rule`。
-    pub fn register(&mut self, rule: Rule) {
+    pub fn register(&mut self, rule: Rule<A>) {
         match rule.scope {
             RuleScope::Global => self.global.register(rule),
             RuleScope::Local => self.local.register(rule),
@@ -559,7 +594,7 @@ impl LayeredRuleRegistry {
     /// Register a rule to a specific View's registry.
     ///
     /// 将规则注册到特定 View 的注册表。
-    pub fn register_view_rule(&mut self, view_entity: Entity, rule: Rule) {
+    pub fn register_view_rule(&mut self, view_entity: Entity, rule: Rule<A>) {
         self.view.entry(view_entity).or_default().register(rule);
     }
 
@@ -593,8 +628,8 @@ impl LayeredRuleRegistry {
     ///
     /// 获取所有层中匹配的规则，按优先级分组。
     /// 规则按优先级分组（高到低），每组内按条件数量排序（条件少的在前）。
-    pub fn get_matching_rules_grouped(&self, event: &FactEvent) -> Vec<Vec<&Rule>> {
-        let mut all_groups: BTreeMap<i32, Vec<&Rule>> = BTreeMap::new();
+    pub fn get_matching_rules_grouped(&self, event: &FactEvent) -> Vec<Vec<&Rule<A>>> {
+        let mut all_groups: BTreeMap<i32, Vec<&Rule<A>>> = BTreeMap::new();
 
         // Collect from all layers
         for rule in self.global.iter() {
@@ -632,7 +667,7 @@ impl LayeredRuleRegistry {
     /// Get a flat list of all matching rules, sorted by priority then condition count.
     ///
     /// 获取所有匹配规则的扁平列表，按优先级和条件数量排序。
-    pub fn get_matching_rules(&self, event: &FactEvent) -> Vec<&Rule> {
+    pub fn get_matching_rules(&self, event: &FactEvent) -> Vec<&Rule<A>> {
         self.get_matching_rules_grouped(event)
             .into_iter()
             .flatten()
@@ -656,7 +691,7 @@ impl LayeredRuleRegistry {
     /// Get a reference to a rule by ID, searching all layers.
     ///
     /// 按 ID 获取规则的引用，搜索所有层。
-    pub fn get(&self, rule_id: &str) -> Option<&Rule> {
+    pub fn get(&self, rule_id: &str) -> Option<&Rule<A>> {
         self.global
             .get(rule_id)
             .or_else(|| self.local.get(rule_id))
@@ -666,28 +701,28 @@ impl LayeredRuleRegistry {
     /// Iterate over all rules in the Global layer.
     ///
     /// 迭代 Global 层中的所有规则。
-    pub fn global_iter(&self) -> impl Iterator<Item = &Rule> {
+    pub fn global_iter(&self) -> impl Iterator<Item = &Rule<A>> {
         self.global.iter()
     }
 
     /// Iterate over all rules in the Local layer.
     ///
     /// 迭代 Local 层中的所有规则。
-    pub fn local_iter(&self) -> impl Iterator<Item = &Rule> {
+    pub fn local_iter(&self) -> impl Iterator<Item = &Rule<A>> {
         self.local.iter()
     }
 
     /// Iterate over all View layers with their entity keys.
     ///
     /// 迭代所有 View 层及其实体键。
-    pub fn view_iter(&self) -> impl Iterator<Item = (Entity, &RuleRegistry)> {
+    pub fn view_iter(&self) -> impl Iterator<Item = (Entity, &RuleRegistry<A>)> {
         self.view.iter().map(|(e, r)| (*e, r))
     }
 
     /// Iterate over all rules across all layers.
     ///
     /// 迭代所有层中的所有规则。
-    pub fn iter(&self) -> impl Iterator<Item = &Rule> {
+    pub fn iter(&self) -> impl Iterator<Item = &Rule<A>> {
         self.global
             .iter()
             .chain(self.local.iter())
@@ -698,10 +733,11 @@ impl LayeredRuleRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::asset::CoreActionDef;
 
     #[test]
     fn test_rule_builder() {
-        let rule = Rule::builder("test_rule", "test_event")
+        let rule = Rule::<CoreActionDef>::builder("test_rule", "test_event")
             .condition_expr("$counter == 3")
             .modify(FactModification::Set(
                 "result".to_string(),
@@ -770,7 +806,7 @@ mod tests {
 
     #[test]
     fn test_rule_registry_basic() {
-        let mut registry = RuleRegistry::new();
+        let mut registry = RuleRegistry::<CoreActionDef>::new();
         assert!(registry.is_empty());
         assert_eq!(registry.len(), 0);
 
@@ -785,7 +821,7 @@ mod tests {
 
     #[test]
     fn test_rule_registry_unregister() {
-        let mut registry = RuleRegistry::new();
+        let mut registry = RuleRegistry::<CoreActionDef>::new();
         let rule = Rule::builder("rule1", "event1").build();
         registry.register(rule);
 
@@ -800,7 +836,7 @@ mod tests {
 
     #[test]
     fn test_rule_registry_set_enabled() {
-        let mut registry = RuleRegistry::new();
+        let mut registry = RuleRegistry::<CoreActionDef>::new();
         let rule = Rule::builder("rule1", "event1").build();
         registry.register(rule);
 
@@ -815,7 +851,7 @@ mod tests {
 
     #[test]
     fn test_rule_registry_get_matching_rules() {
-        let mut registry = RuleRegistry::new();
+        let mut registry = RuleRegistry::<CoreActionDef>::new();
 
         let rule1 = Rule::builder("rule1", "event_a").priority(10).build();
         let rule2 = Rule::builder("rule2", "event_a").priority(5).build();
@@ -836,7 +872,7 @@ mod tests {
 
     #[test]
     fn test_rule_registry_iter() {
-        let mut registry = RuleRegistry::new();
+        let mut registry = RuleRegistry::<CoreActionDef>::new();
         registry.register(Rule::builder("r1", "e1").build());
         registry.register(Rule::builder("r2", "e2").build());
         registry.register(Rule::builder("r3", "e3").build());
@@ -847,7 +883,7 @@ mod tests {
 
     #[test]
     fn test_rule_builder_enabled_false() {
-        let rule = Rule::builder("disabled_rule", "event")
+        let rule = Rule::<CoreActionDef>::builder("disabled_rule", "event")
             .enabled(false)
             .build();
 
@@ -856,7 +892,7 @@ mod tests {
 
     #[test]
     fn test_rule_matches_disabled() {
-        let mut registry = RuleRegistry::new();
+        let mut registry = RuleRegistry::<CoreActionDef>::new();
         let rule = Rule::builder("rule1", "event_a").enabled(false).build();
         registry.register(rule);
 

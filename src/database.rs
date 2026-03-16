@@ -7,30 +7,6 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-/// Unique identifier for a fact in the database.
-///
-/// 数据库中事实的唯一标识符。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FactKey(pub String);
-
-impl FactKey {
-    pub fn new(key: impl Into<String>) -> Self {
-        Self(key.into())
-    }
-}
-
-impl From<&str> for FactKey {
-    fn from(s: &str) -> Self {
-        Self(s.to_string())
-    }
-}
-
-impl From<String> for FactKey {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
-}
-
 /// Value types supported by the fact database.
 ///
 /// 事实数据库支持的值类型。
@@ -226,9 +202,6 @@ impl From<Vec<bool>> for FactValue {
 /// 事实数据库只读访问的 trait。
 /// 由 `FactDatabase` 和 `LayeredFactDatabase` 实现。
 pub trait FactReader {
-    /// Get a fact value by key.
-    fn get(&self, key: &FactKey) -> Option<&FactValue>;
-
     /// Get a fact value by string key.
     fn get_by_str(&self, key: &str) -> Option<&FactValue>;
 
@@ -286,7 +259,7 @@ pub trait FactReader {
 /// 用于存储事实（游戏状态）的集中式数据库。
 #[derive(Resource, Default, Debug, Clone)]
 pub struct FactDatabase {
-    facts: HashMap<FactKey, FactValue>,
+    facts: HashMap<String, FactValue>,
 }
 
 impl FactDatabase {
@@ -302,7 +275,7 @@ impl FactDatabase {
     /// Set a fact value in the database.
     ///
     /// 在数据库中设置一个事实值。
-    pub fn set(&mut self, key: impl Into<FactKey>, value: impl Into<FactValue>) {
+    pub fn set(&mut self, key: impl Into<String>, value: impl Into<FactValue>) {
         self.facts.insert(key.into(), value.into());
     }
 
@@ -311,7 +284,7 @@ impl FactDatabase {
     ///
     /// 仅当值与当前值不同时才设置。
     /// 如果值被更改返回 true，否则返回 false。
-    pub fn set_if_changed(&mut self, key: impl Into<FactKey>, value: impl Into<FactValue>) -> bool {
+    pub fn set_if_changed(&mut self, key: impl Into<String>, value: impl Into<FactValue>) -> bool {
         let key = key.into();
         let value = value.into();
         if self.facts.get(&key) != Some(&value) {
@@ -322,18 +295,11 @@ impl FactDatabase {
         }
     }
 
-    /// Get a fact value from the database.
-    ///
-    /// 从数据库中获取一个事实值。
-    pub fn get(&self, key: &FactKey) -> Option<&FactValue> {
-        self.facts.get(key)
-    }
-
     /// Get a fact value by string key.
     ///
     /// 通过字符串键获取事实值。
     pub fn get_by_str(&self, key: &str) -> Option<&FactValue> {
-        self.facts.get(&FactKey(key.to_string()))
+        self.facts.get(key)
     }
 
     /// Get an integer fact value, returning a default if not found or wrong type.
@@ -375,14 +341,14 @@ impl FactDatabase {
     ///
     /// 检查数据库中是否存在某个事实。
     pub fn contains(&self, key: &str) -> bool {
-        self.facts.contains_key(&FactKey(key.to_string()))
+        self.facts.contains_key(key)
     }
 
     /// Remove a fact from the database.
     ///
     /// 从数据库中移除一个事实。
     pub fn remove(&mut self, key: &str) -> Option<FactValue> {
-        self.facts.remove(&FactKey(key.to_string()))
+        self.facts.remove(key)
     }
 
     /// Increment an integer fact by a given amount.
@@ -398,7 +364,7 @@ impl FactDatabase {
     /// Get all facts as an iterator.
     ///
     /// 获取所有事实的迭代器。
-    pub fn iter(&self) -> impl Iterator<Item = (&FactKey, &FactValue)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &FactValue)> {
         self.facts.iter()
     }
 
@@ -425,16 +391,40 @@ impl FactDatabase {
 }
 
 impl FactReader for FactDatabase {
-    fn get(&self, key: &FactKey) -> Option<&FactValue> {
+    fn get_by_str(&self, key: &str) -> Option<&FactValue> {
         self.facts.get(key)
     }
 
+    fn contains(&self, key: &str) -> bool {
+        self.facts.contains_key(key)
+    }
+}
+
+/// A FactReader that combines two readers, with the primary taking priority.
+/// Useful for layering additional fact sources (e.g., View-local facts on top of global facts).
+///
+/// 组合两个 FactReader 的读取器，primary 优先。
+/// 用于在全局 facts 之上叠加额外的 fact 源（如 View 本地 facts）。
+pub struct CombinedFactReader<'a> {
+    primary: &'a dyn FactReader,
+    secondary: &'a dyn FactReader,
+}
+
+impl<'a> CombinedFactReader<'a> {
+    pub fn new(primary: &'a dyn FactReader, secondary: &'a dyn FactReader) -> Self {
+        Self { primary, secondary }
+    }
+}
+
+impl FactReader for CombinedFactReader<'_> {
     fn get_by_str(&self, key: &str) -> Option<&FactValue> {
-        self.facts.get(&FactKey(key.to_string()))
+        self.primary
+            .get_by_str(key)
+            .or_else(|| self.secondary.get_by_str(key))
     }
 
     fn contains(&self, key: &str) -> bool {
-        self.facts.contains_key(&FactKey(key.to_string()))
+        self.primary.contains(key) || self.secondary.contains(key)
     }
 }
 
@@ -486,19 +476,6 @@ mod tests {
         assert_eq!(float_val.as_int(), None);
         assert_eq!(bool_val.as_string(), None);
         assert_eq!(string_val.as_bool(), None);
-    }
-
-    #[test]
-    fn test_fact_key_from_implementations() {
-        let key_from_str: FactKey = "test_key".into();
-        let key_from_string: FactKey = String::from("test_key").into();
-        let key_new = FactKey::new("test_key");
-
-        assert_eq!(key_from_str.0, "test_key");
-        assert_eq!(key_from_string.0, "test_key");
-        assert_eq!(key_new.0, "test_key");
-        assert_eq!(key_from_str, key_from_string);
-        assert_eq!(key_from_str, key_new);
     }
 
     #[test]
@@ -560,7 +537,7 @@ mod tests {
         assert_eq!(count, 3);
 
         // Verify all keys are present
-        let keys: Vec<_> = db.iter().map(|(k, _)| k.0.as_str()).collect();
+        let keys: Vec<_> = db.iter().map(|(k, _)| k.as_str()).collect();
         assert!(keys.contains(&"a"));
         assert!(keys.contains(&"b"));
         assert!(keys.contains(&"c"));

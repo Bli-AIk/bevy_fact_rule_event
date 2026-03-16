@@ -6,8 +6,7 @@
 //! FRE 修改器的简单表达式求值。
 //! 支持对 fact 值进行算术运算。
 
-use crate::database::FactValue;
-use crate::layered::LayeredFactDatabase;
+use crate::database::{FactReader, FactValue};
 
 /// Evaluate a simple arithmetic expression.
 ///
@@ -26,7 +25,7 @@ use crate::layered::LayeredFactDatabase;
 /// - 括号用于分组
 ///
 /// Returns the result as f64, or None if evaluation fails.
-pub fn evaluate_expr(expr: &str, db: &LayeredFactDatabase) -> Option<f64> {
+pub fn evaluate_expr(expr: &str, db: &dyn FactReader) -> Option<f64> {
     let expr = expr.trim();
     if expr.is_empty() {
         return None;
@@ -40,7 +39,7 @@ pub fn evaluate_expr(expr: &str, db: &LayeredFactDatabase) -> Option<f64> {
 /// Evaluate an expression and return as FactValue.
 ///
 /// 评估表达式并返回为 FactValue。
-pub fn evaluate_expr_to_fact(expr: &str, db: &LayeredFactDatabase) -> Option<FactValue> {
+pub fn evaluate_expr_to_fact(expr: &str, db: &dyn FactReader) -> Option<FactValue> {
     let result = evaluate_expr(expr, db)?;
 
     // Return as Int if the result is a whole number, otherwise Float
@@ -95,7 +94,7 @@ fn try_parse_unary_minus(
 }
 
 /// Tokenize an expression string, resolving $variables to their values.
-fn tokenize(expr: &str, db: &LayeredFactDatabase) -> Option<Vec<Token>> {
+fn tokenize(expr: &str, db: &dyn FactReader) -> Option<Vec<Token>> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = expr.chars().collect();
     let mut i = 0;
@@ -264,6 +263,7 @@ fn parse_primary(tokens: &[Token], start: usize) -> Option<(f64, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::layered::LayeredFactDatabase;
 
     #[test]
     #[expect(clippy::approx_constant)] // reason: test uses PI-like value intentionally
