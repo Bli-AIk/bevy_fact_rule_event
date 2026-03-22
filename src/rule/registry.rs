@@ -1,3 +1,18 @@
+//! # registry.rs
+//!
+//! # registry.rs 文件
+//!
+//! ## Module Overview
+//!
+//! ## 模块概述
+//!
+//! This file contains the core in-memory registry for FRE rules. It stores rules by id, maintains
+//! a priority-sorted cache for fast event matching, and exposes the operations needed to register,
+//! remove, enable, and iterate rules at runtime.
+//!
+//! 这个文件包含 FRE 规则的核心内存注册表。它按 id 存储规则，维护一个按优先级排序的缓存以便
+//! 快速匹配事件，并提供运行时注册、移除、启用和遍历规则所需的操作。
+
 use std::collections::{BTreeMap, HashMap};
 
 use bevy::prelude::Resource;

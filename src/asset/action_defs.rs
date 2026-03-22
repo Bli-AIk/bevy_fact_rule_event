@@ -1,3 +1,18 @@
+//! # action_defs.rs
+//!
+//! # action_defs.rs 文件
+//!
+//! ## Module Overview
+//!
+//! ## 模块概述
+//!
+//! This file defines the serializable action shapes that can appear inside FRE assets. It provides
+//! the generic `ActionDef` trait used across the crate, plus the built-in `CoreActionDef` enum
+//! that covers logging, local fact updates, event emission, and custom host actions.
+//!
+//! 这个文件定义了 FRE 资产里可序列化的动作形状。它提供整个 crate 共用的泛型 `ActionDef`
+//! trait，以及内置的 `CoreActionDef` 枚举，用来表示日志、本地事实更新、事件发射和宿主自定义动作。
+
 use bevy::reflect::TypePath;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -1,3 +1,18 @@
+//! # value_defs.rs
+//!
+//! # value_defs.rs 文件
+//!
+//! ## Module Overview
+//!
+//! ## 模块概述
+//!
+//! This file defines the serializable value-level vocabulary used by FRE assets. It covers fact
+//! literals, fact modifications, action-event trigger shapes, and the conversion layer that maps
+//! those authored values into runtime FRE primitives.
+//!
+//! 这个文件定义了 FRE 资产里与值相关的可序列化词汇。它覆盖事实字面量、事实修改、动作事件
+//! 触发器形状，以及把这些作者侧值转换成运行时 FRE 基元的适配层。
+
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
