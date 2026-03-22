@@ -63,9 +63,9 @@ pub enum FactModification {
     /// 将事实设置为特定值。
     Set(String, FactValue),
 
-    /// Increment an integer fact by a value (legacy, use Add for new code).
+    /// Increment an integer fact by a whole-number value.
     ///
-    /// 将整数事实增加指定值（旧版，新代码请用 Add）。
+    /// 将整数事实增加指定的整数值。
     Increment(String, i64),
 
     /// Add a numeric value to a fact.
