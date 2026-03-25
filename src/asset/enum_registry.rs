@@ -6,11 +6,11 @@
 //!
 //! ## 模块概述
 //!
-//! This file provides the enum registry used when FRE assets want symbolic variants in their fact
+//! Provides the enum registry used when FRE assets want symbolic variants in their fact
 //! definitions. It stores both forward and reverse mappings and converts schema-level enum values
 //! into concrete runtime `FactValue`s.
 //!
-//! 这个文件提供了 FRE 资产在事实定义里使用符号化枚举值时所依赖的枚举注册表。它同时保存正向
+//! 提供了 FRE 资产在事实定义里使用符号化枚举值时所依赖的枚举注册表。它同时保存正向
 //! 和反向映射，并把 schema 层的枚举值转换成真正的运行时 `FactValue`。
 
 use bevy::prelude::*;

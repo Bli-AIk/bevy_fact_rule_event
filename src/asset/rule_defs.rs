@@ -6,11 +6,11 @@
 //!
 //! ## 模块概述
 //!
-//! This file defines the asset-side schema for FRE rules. It contains the serializable rule and
+//! Defines the asset-side schema for FRE rules. It contains the serializable rule and
 //! asset structs, the scope definition used by `.fre.ron`, and the conversion helpers that turn
 //! authored rules into runtime registry entries.
 //!
-//! 这个文件定义了 FRE 规则在资产侧的 schema。它包含可序列化的规则和资产结构、`.fre.ron`
+//! 定义了 FRE 规则在资产侧的 schema。它包含可序列化的规则和资产结构、`.fre.ron`
 //! 使用的作用域定义，以及把作者写下的规则转换成运行时注册表条目的辅助函数。
 
 use bevy::prelude::*;

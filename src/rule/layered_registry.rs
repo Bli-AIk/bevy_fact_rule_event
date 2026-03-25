@@ -6,11 +6,11 @@
 //!
 //! ## 模块概述
 //!
-//! This file extends the basic FRE registry with lifecycle-aware layers. It keeps global, local,
+//! Extends the basic FRE registry with lifecycle-aware layers. It keeps global, local,
 //! and per-view rule registries separate so callers can clear transient rule scopes without
 //! disturbing rules that should survive across scenes or UI instances.
 //!
-//! 这个文件在基础 FRE 注册表之上增加了带生命周期语义的分层结构。它把 global、local 和
+//! 在基础 FRE 注册表之上增加了带生命周期语义的分层结构。它把 global、local 和
 //! per-view 的规则注册表分开维护，这样调用方就能清理短生命周期的规则，而不影响应当跨场景或
 //! 跨 UI 实例持续存在的规则。
 
