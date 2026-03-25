@@ -80,8 +80,8 @@ impl ConditionEvaluatorTrait for DefaultConditionEvaluator {
         _facts: &dyn FactReader,
         _enums: &EnumRegistry,
     ) -> bool {
-        // Default: if no conditions, return true; otherwise also return true (no evaluation)
-        // This maintains backward compatibility - rules without conditions always match
+        // Default evaluator keeps FRE bootstrappable before a game installs
+        // its own expression-aware evaluator.
         true
     }
 }

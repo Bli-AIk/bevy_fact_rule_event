@@ -55,6 +55,29 @@ use bevy::asset::AssetApp;
 use bevy::ecs::schedule::{InternedScheduleLabel, ScheduleLabel};
 use bevy::prelude::*;
 
+/// Convenient re-exports for common usage.
+///
+/// 常用类型的便捷重导出。
+pub mod prelude {
+    pub use crate::{
+        ActionDef, ActionHandlerRegistry, ConditionEvaluator, CoreActionDef, EnumRegistry,
+        FREPlugin, FRESystemSet, FactDatabase, FactEvent, FactEventId, FactModification,
+        FactReader, FactValue, LayeredFactDatabase, LayeredRuleRegistry, PendingFactEvents, Rule,
+        RuleRegistry, RuleScope,
+    };
+}
+
+/// System set for the FRE processing systems.
+///
+/// FRE 处理系统的系统集。
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FRESystemSet {
+    /// Emits pending events buffered from the previous frame.
+    EmitEvents,
+    /// Evaluates rules and applies modifications.
+    ProcessRules,
+}
+
 /// Main plugin for the FRE system.
 ///
 /// FRE 系统的主插件。
@@ -84,11 +107,17 @@ impl<A: ActionDef> Plugin for FREPlugin<A> {
             .init_asset::<FreAsset<A>>()
             .register_asset_loader(FreAssetLoader::<A>::default())
             .add_message::<FactEvent>()
+            .configure_sets(
+                schedule,
+                (FRESystemSet::EmitEvents, FRESystemSet::ProcessRules).chain(),
+            )
             .add_systems(
                 schedule,
                 (
-                    systems::emit_pending_events_system,
-                    systems::process_rules_system::<A>.run_if(systems::has_fact_events),
+                    systems::emit_pending_events_system.in_set(FRESystemSet::EmitEvents),
+                    systems::process_rules_system::<A>
+                        .run_if(systems::has_fact_events)
+                        .in_set(FRESystemSet::ProcessRules),
                 )
                     .chain(),
             );
