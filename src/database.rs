@@ -7,10 +7,14 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+#[cfg(feature = "debug")]
+use bevy::reflect::Reflect;
+
 /// Value types supported by the fact database.
 ///
 /// 事实数据库支持的值类型。
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "debug", derive(Reflect))]
 pub enum FactValue {
     Int(i64),
     Float(f64),
@@ -258,6 +262,7 @@ pub trait FactReader {
 ///
 /// 用于存储事实（游戏状态）的集中式数据库。
 #[derive(Resource, Default, Debug, Clone)]
+#[cfg_attr(feature = "debug", derive(Reflect))]
 pub struct FactDatabase {
     facts: HashMap<String, FactValue>,
 }

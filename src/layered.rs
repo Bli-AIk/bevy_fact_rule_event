@@ -19,6 +19,9 @@
 use crate::database::{FactDatabase, FactReader, FactValue};
 use bevy::prelude::*;
 
+#[cfg(feature = "debug")]
+use bevy::reflect::Reflect;
+
 /// Layered fact database with global and local scopes.
 ///
 /// 具有全局和局部作用域的分层事实数据库。
@@ -37,6 +40,7 @@ use bevy::prelude::*;
 /// - `set` / `set_local`: 写入局部层（默认）
 /// - `set_global`: 写入全局层（谨慎使用）
 #[derive(Resource, Default, Debug)]
+#[cfg_attr(feature = "debug", derive(Reflect))]
 pub struct LayeredFactDatabase {
     /// Global layer: persistent data across game states.
     ///
