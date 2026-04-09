@@ -333,6 +333,14 @@ impl<A: ActionDef> RuleBuilder<A> {
         self
     }
 
+    /// Add an action to this rule.
+    ///
+    /// 向此规则添加动作。
+    pub fn action(mut self, action: A) -> Self {
+        self.actions.push(action);
+        self
+    }
+
     /// Set whether this rule consumes the event.
     ///
     /// 设置此规则是否消费事件。
