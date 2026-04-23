@@ -10,7 +10,7 @@
 //! literals, fact modifications, action-event trigger shapes, and the conversion layer that maps
 //! those authored values into runtime FRE primitives.
 //!
-//! 定义了 FRE 资产里与值相关的可序列化词汇。它覆盖事实字面量、事实修改、动作事件
+//! 定义了 FRE 资源里与值相关的可序列化词汇。它覆盖事实字面量、事实修改、动作事件
 //! 触发器形状，以及把这些作者侧值转换成运行时 FRE 基元的适配层。
 
 use bevy::prelude::*;

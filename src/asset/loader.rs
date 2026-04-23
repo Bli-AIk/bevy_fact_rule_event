@@ -10,7 +10,7 @@
 //! Bevy asset loader for `.fre.ron` assets and the registry that host applications use to bind
 //! serialized action names to runtime command handlers.
 //!
-//! 负责 FRE 文件的资产加载层和宿主动作分发层。它定义了 `.fre.ron` 资产的 Bevy 加载器，
+//! 负责 FRE 文件的资源加载层和宿主动作分发层。它定义了 `.fre.ron` 资源的 Bevy 加载器，
 //! 以及宿主应用用来把序列化动作名绑定到运行时命令处理器的注册表。
 
 use bevy::asset::io::Reader;
