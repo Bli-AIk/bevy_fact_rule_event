@@ -13,42 +13,66 @@
 
 ## Acknowledgements
 
-This FRE system is deeply inspired by **aarthificial**'s brilliant work on data-driven game logic. We express our sincere gratitude and admiration for these foundational ideas:
+This FRE system is deeply inspired by **aarthificial**'s brilliant work on data-driven game logic. We express our
+sincere gratitude and admiration for these foundational ideas:
 
-- [📺 Dynamic Conversations - Legacy Devlog #23](https://www.youtube.com/watch?v=1LlF5p5Od6A) 
+- [📺 Dynamic Conversations - Legacy Devlog #23](https://www.youtube.com/watch?v=1LlF5p5Od6A)
 - [📺 Implicit Choices - Legacy Devlog #24](https://www.youtube.com/watch?v=yAIH7GGZ9L0)
 
 ## Introduction
 
-`bevy_fact_rule_event` is a data-driven system that separates game logic from code through a declarative rule engine.  
-It solves the problem of complex, hardcoded game logic by enabling designers to define behavior through external data files, allowing users to modify game behavior without recompiling code.
+Hardcoding complex game logic like *"if player HP < 10 and has the magic sword, trigger the secret dialogue"* often
+leads to a tangled web of `if/else` statements that are difficult to maintain and require constant recompilation for
+every tiny tweak.
 
-With `bevy_fact_rule_event`, you only need to define rules in RON files and load them as assets - the system automatically evaluates conditions and executes actions based on game events.  
-In the future, it may also support visual rule editors and real-time rule hot-reloading.
+`bevy_fact_rule_event` offers a data-driven alternative. It is a declarative rule engine that separates game logic from
+your Rust code, allowing you to define behavior in external RON files.
+
+However, it's important to remember that this isn't a magic bullet for every project. It's an architectural choice
+designed for those who value flexibility and designer-led iteration over direct, hardcoded control.
+
+## Pros and Cons
+
+Like any architectural pattern, the FRE system is a trade-off.
+
+### Pros ✅
+
+- **Decoupling**: Game logic is completely separated from the engine and system code.
+- **Iteration Speed**: Change game behavior by editing RON files without waiting for recompilation.
+- **Designer Friendly**: Empowers non-programmers to tweak quests, dialogue, and balance on the fly.
+- **Centralized State**: The Fact database provides a single source of truth for the entire game state.
+
+### Cons ❌
+
+- **Indirection**: It can be harder to trace the exact cause of a behavior compared to traditional code debugging.
+- **Performance Overhead**: Evaluating rules has a cost; while negligible for dialogue, it's not suited for
+  high-frequency physics logic.
+- **Complexity**: For very simple games, managing external rules might introduce more overhead than it saves.
 
 ## Core Philosophy
 
 > "Events don't contain logic, data doesn't contain behavior, logic only exists in rules."
 
 The FRE system enforces clean separation of concerns:
+
 - **Facts (F)**: Centralized key-value database for game state
 - **Rules (R)**: Declarative logic that transforms state based on conditions
 - **Events (E)**: Signal broadcasts that trigger rule evaluation
 
 ## Features
 
-* **Data-Driven Rules**: Define game logic in RON files without code changes
-* **Layered Fact Database**: Hierarchical state management with Global and Local layers
-  - Global layer: Persistent facts that survive scene changes (e.g., player stats)
-  - Local layer: Temporary facts scoped to current context (e.g., battle state)
-* **Centralized State Management**: All game facts stored in a queryable database
-* **Conditional Logic**: Complex condition evaluation with nested logic operators
-* **Automatic Asset Loading**: Seamless integration with Bevy's asset system
-* **Event Broadcasting**: Decoupled communication between game systems
-* **Type-Safe Values**: Support for Int, Float, Bool, and String fact types
-* **Bidirectional Sync**: Facts can sync with ECS components for reactive UI updates
-* (Planned) Visual Rule Editor
-* (Planned) Hot-Reloading Support
+* 🗂️ **Data-Driven Rules**: Define game logic in RON files without code changes
+* 🥞 **Layered Fact Database**: Hierarchical state management with Global and Local layers
+    - Global layer: Persistent facts that survive scene changes (e.g., player stats)
+    - Local layer: Temporary facts scoped to current context (e.g., battle state)
+* 🗄️ **Centralized State Management**: All game facts stored in a queryable database
+* 🔀 **Conditional Logic**: Complex condition evaluation with nested logic operators
+* 📥 **Automatic Asset Loading**: Seamless integration with Bevy's asset system
+* 📡 **Event Broadcasting**: Decoupled communication between game systems
+* 🛡️ **Type-Safe Values**: Support for Int, Float, Bool, and String fact types
+* 🔄 **Bidirectional Sync**: Facts can sync with ECS components for reactive UI updates
+* 👁️ **(Planned) Visual Rule Editor**
+* 🔥 **(Planned) Hot-Reloading Support**
 
 ## Bevy Version Support
 
@@ -185,10 +209,10 @@ The FRE system enforces clean separation of concerns:
 
 This project uses the following crates:
 
-| Crate                                             | Version | Description                 |
-| ------------------------------------------------- | ------- | --------------------------- |
-| [bevy](https://crates.io/crates/bevy) | 0.18   | Game engine |
-| [serde](https://crates.io/crates/serde) | 1.0   | Serialization framework |
+| Crate                                   | Version | Description             |
+|-----------------------------------------|---------|-------------------------|
+| [bevy](https://crates.io/crates/bevy)   | 0.18    | Game engine             |
+| [serde](https://crates.io/crates/serde) | 1.0     | Serialization framework |
 
 ## Contributing
 
