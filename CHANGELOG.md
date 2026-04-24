@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/Bli-AIk/bevy_fact_rule_event/compare/v0.4.0...v0.4.1) - 2026-04-24
+
+### Added
+
+- *(rule)* add action method to rule builder
+
+### Documentation
+
+- *(bevy_fact_rule_event)* update and refine documentation
+
+### Fixed
+
+- *(core)* update crate dependencies and clean up docs
+
+### Refactor
+
+- standardize terminology from "资产" to "资源"
+- *(core)* add debug feature and derive Reflect
+
 ## [0.4.0](https://github.com/Bli-AIk/bevy_fact_rule_event/compare/v0.3.0...v0.4.0) - 2026-03-25
 
 ### Added
