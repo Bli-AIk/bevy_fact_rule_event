@@ -7,11 +7,11 @@
 //! ## 模块概述
 //!
 //! Defines the serializable value-level vocabulary used by FRE assets. It covers fact
-//! literals, fact modifications, action-event trigger shapes, and the conversion layer that maps
-//! those authored values into runtime FRE primitives.
+//! literals, fact modifications, event trigger shapes, and the conversion layer that maps those
+//! authored values into runtime FRE primitives.
 //!
-//! 定义了 FRE 资源里与值相关的可序列化词汇。它覆盖事实字面量、事实修改、动作事件
-//! 触发器形状，以及把这些作者侧值转换成运行时 FRE 基元的适配层。
+//! 定义了 FRE 资源里与值相关的可序列化词汇。它覆盖事实字面量、事实修改、事件触发器
+//! 形状，以及把这些作者侧值转换成运行时 FRE 基元的适配层。
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -87,20 +87,9 @@ impl From<FactModificationDef> for FactModification {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ActionEventKind {
-    JustPressed,
-    Pressed,
-    JustReleased,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RuleEventDef {
     Event(String),
-    ActionEvent {
-        action: String,
-        kind: ActionEventKind,
-    },
 }
 
 impl Default for RuleEventDef {
@@ -113,14 +102,6 @@ impl RuleEventDef {
     pub fn to_event_id(&self) -> String {
         match self {
             RuleEventDef::Event(id) => id.clone(),
-            RuleEventDef::ActionEvent { action, kind } => {
-                let kind_str = match kind {
-                    ActionEventKind::JustPressed => "just_pressed",
-                    ActionEventKind::Pressed => "pressed",
-                    ActionEventKind::JustReleased => "just_released",
-                };
-                format!("action:{}:{}", action.to_lowercase(), kind_str)
-            }
         }
     }
 }
