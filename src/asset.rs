@@ -12,9 +12,7 @@ pub use action_defs::{ActionDef, CoreActionDef};
 pub use enum_registry::EnumRegistry;
 pub use loader::{ActionHandler, ActionHandlerRegistry, FreAssetLoader};
 pub use rule_defs::{FreAsset, RuleDef, RuleScopeDef};
-pub use value_defs::{
-    ActionEventKind, FactModificationDef, FactValueDef, LocalFactValue, RuleEventDef,
-};
+pub use value_defs::{FactModificationDef, FactValueDef, LocalFactValue, RuleEventDef};
 
 #[cfg(test)]
 mod tests {
@@ -54,7 +52,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fre_asset_action_event_format() {
+    fn legacy_action_event_syntax_is_rejected() {
         let fre_data = r#"
 (
     rules: [
@@ -78,14 +76,44 @@ mod tests {
 )
 "#;
 
+        let err = ron::from_str::<FreAsset>(fre_data).unwrap_err();
+        let error_message = err.to_string();
+        assert!(
+            error_message.contains("ActionEvent") && error_message.contains("expected `Event`"),
+            "unexpected parse error: {error_message}"
+        );
+    }
+
+    #[test]
+    fn test_fre_asset_semantic_input_event_format() {
+        let fre_data = r#"
+(
+    rules: [
+        (
+            event: Event("input:navigate_up"),
+            conditions: ["$selection > 0"],
+            actions: [
+                SetLocalFact("selection", Expr("$selection - 1")),
+                Log(message: "moved up"),
+            ],
+        ),
+        (
+            event: Event("input:confirm"),
+            conditions: ["$depth == 0"],
+            actions: [
+                SetLocalFact("depth", Int(1)),
+                EmitEvent("confirmed"),
+            ],
+        ),
+    ],
+)
+"#;
+
         let asset: FreAsset = ron::from_str(fre_data).unwrap();
         assert_eq!(asset.rules.len(), 2);
-        assert_eq!(asset.rules[0].event.to_event_id(), "action:up:just_pressed");
+        assert_eq!(asset.rules[0].event.to_event_id(), "input:navigate_up");
         assert_eq!(asset.rules[0].conditions, vec!["$selection > 0"]);
-        assert_eq!(
-            asset.rules[1].event.to_event_id(),
-            "action:confirm:just_pressed"
-        );
+        assert_eq!(asset.rules[1].event.to_event_id(), "input:confirm");
         assert_eq!(asset.rules[1].conditions, vec!["$depth == 0"]);
     }
 
